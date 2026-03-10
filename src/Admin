@@ -1,0 +1,322 @@
+import { useState, useEffect } from "react";
+import { initializeApp, getApps } from "firebase/app";
+import { getFirestore, doc, setDoc, getDoc } from "firebase/firestore";
+
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD4txUu4Ex55ERw3_w__eBV00cr-iRnLg4",
+  authDomain: "wavely-eb418.firebaseapp.com",
+  projectId: "wavely-eb418",
+  storageBucket: "wavely-eb418.firebasestorage.app",
+  messagingSenderId: "914889903752",
+  appId: "1:914889903752:web:891f46cce189e5a60f993d",
+};
+
+const ADMIN_PASSWORD = "wavely2026";
+
+const firebaseApp = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
+const db = getFirestore(firebaseApp);
+
+const DEFAULT_DATA = {
+  trends: [
+    { tag: "#SilentWalk", score: 94, delta: "+340%", category: "Lifestyle", peak: "18h", icon: "🚶" },
+    { tag: "#ColdPlunge", score: 89, delta: "+210%", category: "Wellness", peak: "24h", icon: "🧊" },
+    { tag: "#RottenTomatoes", score: 82, delta: "+180%", category: "Food", peak: "36h", icon: "🍅" },
+    { tag: "#SoftLife", score: 78, delta: "+155%", category: "Aesthetic", peak: "48h", icon: "🌸" },
+    { tag: "#WristCheck", score: 71, delta: "+90%", category: "Fashion", peak: "52h", icon: "⌚" },
+  ],
+  sounds: [
+    { name: "Midnight Rain – Taylor Swift (Sped Up)", plays: "2.1M", rise: "+580%", hot: true },
+    { name: "STAY – The Kid LAROI x Justin Bieber (Remix)", plays: "980K", rise: "+220%", hot: false },
+    { name: "Espresso – Sabrina Carpenter", plays: "740K", rise: "+190%", hot: false },
+  ],
+  earlyVideos: [
+    { views: "8.4K", trend: "↑ 4x/h", title: "Couples doing the 'Library Date' aesthetic", niche: "Romance" },
+    { views: "12K", trend: "↑ 6x/h", title: "Barista art with protein shakes", niche: "Fitness" },
+    { views: "6.1K", trend: "↑ 9x/h", title: "Morning routine avec lumière bleue", niche: "Wellbeing" },
+  ],
+};
+
+const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap');`;
+
+export default function Admin() {
+  const [authed, setAuthed] = useState(false);
+  const [pwd, setPwd] = useState("");
+  const [pwdError, setPwdError] = useState(false);
+  const [data, setData] = useState(DEFAULT_DATA);
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null); // null | "success" | "error"
+  const [loading, setLoading] = useState(false);
+  const [activeSection, setActiveSection] = useState("trends");
+  const [lastUpdate, setLastUpdate] = useState(null);
+
+  const handleLogin = () => {
+    if (pwd === ADMIN_PASSWORD) { setAuthed(true); loadData(); }
+    else { setPwdError(true); setTimeout(() => setPwdError(false), 2000); }
+  };
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const snap = await getDoc(doc(db, "wavely", "content"));
+      if (snap.exists()) {
+        const d = snap.data();
+        setData(d.data || DEFAULT_DATA);
+        setLastUpdate(d.updatedAt || null);
+      }
+    } catch(e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  const handleSave = async () => {
+    setSaving(true); setSaveStatus(null);
+    try {
+      await setDoc(doc(db, "wavely", "content"), {
+        data,
+        updatedAt: new Date().toISOString(),
+      });
+      setSaveStatus("success");
+      setLastUpdate(new Date().toISOString());
+      setTimeout(() => setSaveStatus(null), 3000);
+    } catch(e) {
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus(null), 3000);
+    } finally { setSaving(false); }
+  };
+
+  const updateTrend = (idx, field, val) => {
+    const updated = [...data.trends];
+    updated[idx] = { ...updated[idx], [field]: field === "score" ? Number(val) : val };
+    setData(d => ({ ...d, trends: updated }));
+  };
+
+  const updateSound = (idx, field, val) => {
+    const updated = [...data.sounds];
+    updated[idx] = { ...updated[idx], [field]: field === "hot" ? val : val };
+    setData(d => ({ ...d, sounds: updated }));
+  };
+
+  const updateEarly = (idx, field, val) => {
+    const updated = [...data.earlyVideos];
+    updated[idx] = { ...updated[idx], [field]: val };
+    setData(d => ({ ...d, earlyVideos: updated }));
+  };
+
+  const css = `
+    ${FONTS}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#05040f;font-family:'DM Sans',sans-serif}
+    .admin{min-height:100vh;background:#05040f;color:#e8e6f0;max-width:680px;margin:0 auto;padding:24px 20px 60px}
+    .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:24px;background:linear-gradient(135deg,#00f5d4,#7209b7,#f72585);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .admin-title{font-family:'Syne',sans-serif;font-size:14px;color:rgba(232,230,240,0.4);letter-spacing:2px;text-transform:uppercase;margin-top:4px}
+    .login-card{background:rgba(255,255,255,0.04);border:1px solid rgba(0,245,212,0.2);border-radius:20px;padding:40px 32px;max-width:340px;margin:80px auto;text-align:center}
+    .input{width:100%;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 16px;color:#fff;font-family:'DM Sans',sans-serif;font-size:16px;outline:none;margin-bottom:12px}
+    .input:focus{border-color:rgba(0,245,212,0.4)}
+    .input-error{border-color:rgba(247,37,133,0.6)!important;animation:shake 0.3s ease}
+    @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+    .btn-primary{width:100%;padding:14px;border-radius:12px;background:linear-gradient(135deg,#00f5d4,#7209b7);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer}
+    .btn-primary:disabled{opacity:0.5;cursor:default}
+    .section-tabs{display:flex;gap:8px;margin:24px 0 20px;flex-wrap:wrap}
+    .stab{padding:8px 16px;border-radius:20px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:rgba(232,230,240,0.5);font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
+    .stab.active{background:rgba(0,245,212,0.12);border-color:rgba(0,245,212,0.4);color:#00f5d4}
+    .card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px;padding:18px;margin-bottom:12px}
+    .card-title{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:rgba(232,230,240,0.5);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px}
+    .field-row{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+    .field{flex:1;min-width:100px}
+    .field-label{font-size:11px;color:rgba(232,230,240,0.35);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
+    .field-input{width:100%;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:10px 12px;color:#fff;font-family:'DM Sans',sans-serif;font-size:13px;outline:none}
+    .field-input:focus{border-color:rgba(0,245,212,0.35)}
+    .score-preview{display:inline-flex;align-items:center;gap:6px;font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:#00f5d4}
+    .save-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:680px;max-width:100%;background:rgba(5,4,15,0.95);backdrop-filter:blur(20px);border-top:1px solid rgba(0,245,212,0.15);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:12;z-index:100}
+    .save-btn{padding:12px 28px;border-radius:12px;background:linear-gradient(135deg,#00f5d4,#7209b7);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:8px}
+    .save-btn:disabled{opacity:0.5;cursor:default}
+    .status-ok{color:#00f5d4;font-size:13px;font-weight:600}
+    .status-err{color:#f72585;font-size:13px;font-weight:600}
+    .hot-toggle{display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);user-select:none}
+    .toggle{width:36px;height:20px;border-radius:10px;position:relative;transition:background 0.2s}
+    .toggle-dot{position:absolute;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left 0.2s}
+    .live-dot{width:8px;height:8px;border-radius:50%;background:#00f5d4;display:inline-block;animation:blink 1.2s infinite;margin-right:6px}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+  `;
+
+  if (!authed) return (
+    <>
+      <style>{css}</style>
+      <div className="admin">
+        <div className="login-card">
+          <div style={{fontSize:36,marginBottom:16}}>🔐</div>
+          <div className="logo" style={{marginBottom:4}}>WAVELY</div>
+          <div className="admin-title" style={{marginBottom:28}}>Admin Dashboard</div>
+          <input className={`input ${pwdError?"input-error":""}`} type="password" placeholder="Mot de passe admin"
+            value={pwd} onChange={e=>setPwd(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
+          {pwdError&&<div style={{color:"#f72585",fontSize:12,marginBottom:10}}>Mot de passe incorrect</div>}
+          <button className="btn-primary" onClick={handleLogin}>Accéder →</button>
+        </div>
+      </div>
+    </>
+  );
+
+  return (
+    <>
+      <style>{css}</style>
+      <div className="admin">
+        {/* Header */}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+          <div>
+            <div className="logo">WAVELY</div>
+            <div className="admin-title">Admin Dashboard</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <a href="https://wavely-sable.vercel.app" target="_blank" style={{fontSize:12,color:"rgba(0,245,212,0.7)",textDecoration:"none"}}>← Voir l'app</a>
+            {lastUpdate&&<div style={{fontSize:10,color:"rgba(232,230,240,0.25)",marginTop:4}}>Dernière MAJ : {new Date(lastUpdate).toLocaleString("fr-FR")}</div>}
+          </div>
+        </div>
+
+        {loading&&<div style={{textAlign:"center",padding:"40px 0",color:"rgba(232,230,240,0.4)"}}>Chargement...</div>}
+
+        {!loading&&(
+          <>
+            {/* Info banner */}
+            <div style={{background:"rgba(0,245,212,0.06)",border:"1px solid rgba(0,245,212,0.2)",borderRadius:12,padding:"12px 16px",marginBottom:20,display:"flex",alignItems:"center",gap:10,fontSize:13}}>
+              <span className="live-dot"/>
+              <span style={{color:"rgba(232,230,240,0.7)"}}>Les modifications sont <strong style={{color:"#00f5d4"}}>publiées instantanément</strong> pour tous vos abonnés dès que vous cliquez "Publier".</span>
+            </div>
+
+            {/* Section tabs */}
+            <div className="section-tabs">
+              {[["trends","📡 Trends (5)"],["sounds","🎵 Sons (3)"],["early","🔍 Early (3)"]].map(([id,label])=>(
+                <button key={id} className={`stab ${activeSection===id?"active":""}`} onClick={()=>setActiveSection(id)}>{label}</button>
+              ))}
+            </div>
+
+            {/* ── TRENDS ── */}
+            {activeSection==="trends"&&(
+              <>
+                <div style={{fontSize:12,color:"rgba(232,230,240,0.4)",marginBottom:16}}>Modifiez les 5 tendances affichées dans le Trend Radar. Les 2 premières sont visibles gratuitement, les 3 dernières sont Pro.</div>
+                {data.trends.map((t,i)=>(
+                  <div key={i} className="card">
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+                      <div className="card-title">Trend #{i+1} {i<2?<span style={{color:"#00f5d4",fontSize:10,background:"rgba(0,245,212,0.1)",borderRadius:20,padding:"2px 8px",marginLeft:6}}>Gratuit</span>:<span style={{color:"#7209b7",fontSize:10,background:"rgba(114,9,183,0.1)",borderRadius:20,padding:"2px 8px",marginLeft:6}}>Pro</span>}</div>
+                      <div className="score-preview">{t.score}</div>
+                    </div>
+                    <div className="field-row">
+                      <div className="field" style={{flex:2}}>
+                        <div className="field-label">Hashtag</div>
+                        <input className="field-input" value={t.tag} onChange={e=>updateTrend(i,"tag",e.target.value)} placeholder="#TrendName"/>
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Icône</div>
+                        <input className="field-input" value={t.icon} onChange={e=>updateTrend(i,"icon",e.target.value)} placeholder="🔥" style={{fontSize:20,textAlign:"center"}}/>
+                      </div>
+                    </div>
+                    <div className="field-row">
+                      <div className="field">
+                        <div className="field-label">Score (0-100)</div>
+                        <input className="field-input" type="number" min="0" max="100" value={t.score} onChange={e=>updateTrend(i,"score",e.target.value)}/>
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Delta</div>
+                        <input className="field-input" value={t.delta} onChange={e=>updateTrend(i,"delta",e.target.value)} placeholder="+300%"/>
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Catégorie</div>
+                        <input className="field-input" value={t.category} onChange={e=>updateTrend(i,"category",e.target.value)} placeholder="Lifestyle"/>
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Pic dans</div>
+                        <input className="field-input" value={t.peak} onChange={e=>updateTrend(i,"peak",e.target.value)} placeholder="24h"/>
+                      </div>
+                    </div>
+                    {/* Score bar preview */}
+                    <div style={{height:4,background:"rgba(255,255,255,0.06)",borderRadius:4,overflow:"hidden",marginTop:4}}>
+                      <div style={{height:"100%",width:`${t.score}%`,background:"linear-gradient(90deg,#00f5d4,#7209b7)",borderRadius:4,transition:"width 0.3s"}}/>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* ── SOUNDS ── */}
+            {activeSection==="sounds"&&(
+              <>
+                <div style={{fontSize:12,color:"rgba(232,230,240,0.4)",marginBottom:16}}>Sons en montée — visibles uniquement pour les abonnés Pro.</div>
+                {data.sounds.map((s,i)=>(
+                  <div key={i} className="card">
+                    <div className="card-title">Son #{i+1}</div>
+                    <div className="field-row">
+                      <div className="field" style={{flex:3}}>
+                        <div className="field-label">Nom du son</div>
+                        <input className="field-input" value={s.name} onChange={e=>updateSound(i,"name",e.target.value)} placeholder="Son – Artiste"/>
+                      </div>
+                    </div>
+                    <div className="field-row">
+                      <div className="field">
+                        <div className="field-label">Lectures</div>
+                        <input className="field-input" value={s.plays} onChange={e=>updateSound(i,"plays",e.target.value)} placeholder="1.5M"/>
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Hausse</div>
+                        <input className="field-input" value={s.rise} onChange={e=>updateSound(i,"rise",e.target.value)} placeholder="+400%"/>
+                      </div>
+                      <div className="field" style={{display:"flex",alignItems:"flex-end",paddingBottom:2}}>
+                        <div className="hot-toggle" onClick={()=>updateSound(i,"hot",!s.hot)}>
+                          <div className="toggle" style={{background:s.hot?"#f72585":"rgba(255,255,255,0.1)"}}>
+                            <div className="toggle-dot" style={{left:s.hot?18:3}}/>
+                          </div>
+                          <span style={{fontSize:12,color:s.hot?"#f72585":"rgba(232,230,240,0.4)"}}>🔥 HOT</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* ── EARLY ── */}
+            {activeSection==="early"&&(
+              <>
+                <div style={{fontSize:12,color:"rgba(232,230,240,0.4)",marginBottom:16}}>Vidéos Early Detector — visibles uniquement pour les abonnés Pro.</div>
+                {data.earlyVideos.map((v,i)=>(
+                  <div key={i} className="card">
+                    <div className="card-title">Vidéo Early #{i+1}</div>
+                    <div className="field-row">
+                      <div className="field" style={{flex:3}}>
+                        <div className="field-label">Titre / Description</div>
+                        <input className="field-input" value={v.title} onChange={e=>updateEarly(i,"title",e.target.value)} placeholder="Description de la vidéo"/>
+                      </div>
+                    </div>
+                    <div className="field-row">
+                      <div className="field">
+                        <div className="field-label">Vues actuelles</div>
+                        <input className="field-input" value={v.views} onChange={e=>updateEarly(i,"views",e.target.value)} placeholder="8.4K"/>
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Croissance</div>
+                        <input className="field-input" value={v.trend} onChange={e=>updateEarly(i,"trend",e.target.value)} placeholder="↑ 4x/h"/>
+                      </div>
+                      <div className="field">
+                        <div className="field-label">Niche</div>
+                        <input className="field-input" value={v.niche} onChange={e=>updateEarly(i,"niche",e.target.value)} placeholder="Lifestyle"/>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
+        )}
+
+        {/* Save bar */}
+        <div className="save-bar">
+          <div>
+            {saveStatus==="success"&&<div className="status-ok">✅ Publié ! Tous vos abonnés voient les nouvelles données.</div>}
+            {saveStatus==="error"&&<div className="status-err">❌ Erreur. Vérifiez votre connexion.</div>}
+            {!saveStatus&&<div style={{fontSize:12,color:"rgba(232,230,240,0.3)"}}>Modifications non publiées</div>}
+          </div>
+          <button className="save-btn" onClick={handleSave} disabled={saving}>
+            {saving?<><span>Publication...</span></>:<><span>🚀 Publier maintenant</span></>}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
