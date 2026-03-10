@@ -61,20 +61,13 @@ firebaseAuth.languageCode = "fr";
 const db = getFirestore(firebaseApp);
 
 async function analyzeWithClaude(idea) {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch("/api/analyze", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      system: `Tu es un expert en viralité TikTok. Analyse l'idée de vidéo et réponds UNIQUEMENT en JSON valide sans markdown ni backticks.
-Format exact:
-{"score":<0-100>,"verdict":"<emoji verdict>","factors":[{"label":"Hook (0-3s)","score":<0-100>,"color":"#00f5d4"},{"label":"Trend Alignment","score":<0-100>,"color":"#f72585"},{"label":"Audio Match","score":<0-100>,"color":"#7209b7"},{"label":"Caption Power","score":<0-100>,"color":"#f9c74f"},{"label":"Posting Timing","score":<0-100>,"color":"#00f5d4"}],"bestTime":"<créneau>","suggestedSound":"<son TikTok>","tip":"<conseil concret>","captions":["<caption1 avec hashtags>","<caption2>","<caption3>"]}`,
-      messages: [{ role: "user", content: `Idée TikTok : ${idea}` }]
-    })
+    body: JSON.stringify({ idea }),
   });
-  const data = await response.json();
-  return JSON.parse(data.content?.[0]?.text || "{}");
+  if (!response.ok) throw new Error("API error");
+  return await response.json();
 }
 
 // ── PAYWALL MODAL ─────────────────────────────────────────────────
