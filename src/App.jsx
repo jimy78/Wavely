@@ -1,4 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { initializeApp, getApps } from "firebase/app";
+import { getAuth, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
+
+// ─── FIREBASE CONFIG ──────────────────────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyD4txUu4Ex55ERw3_w__eBV00cr-iRnLg4",
+  authDomain: "wavely-eb418.firebaseapp.com",
+  projectId: "wavely-eb418",
+  storageBucket: "wavely-eb418.firebasestorage.app",
+  messagingSenderId: "914889903752",
+  appId: "1:914889903752:web:891f46cce189e5a60f993d",
+};
+
+// ─── STRIPE CONFIG ────────────────────────────────────────────────
+const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/14AdRaedQguTacVfML1ZS02";
+
+const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap');`;
 
 const trends = [
   { tag: "#SilentWalk", score: 94, delta: "+340%", category: "Lifestyle", peak: "18h", icon: "🚶" },
@@ -17,362 +34,613 @@ const earlyVideos = [
   { views: "12K", trend: "↑ 6x/h", title: "Barista art with protein shakes", niche: "Fitness" },
   { views: "6.1K", trend: "↑ 9x/h", title: "Morning routine avec lumière bleue", niche: "Wellbeing" },
 ];
-const certifiedReviews = [
-  { name: "Sophia M.", city: "Paris 🇫🇷", avatar: "S", rating: 5, date: "il y a 2 jours", badge: "Abonnée vérifiée", text: "J'ai posté une vidéo exactement sur la trend que Wavely m'avait prédite 48h avant. Résultat : 340K vues en 24h. Jamais vu ça de ma vie 🤯", niche: "Lifestyle", followers: "12K abonnés" },
-  { name: "Karim B.", city: "Lyon 🇫🇷", avatar: "K", rating: 5, date: "il y a 5 jours", badge: "Abonné vérifié", text: "Le Viral Score m'a dit que mon idée avait 87/100 et m'a suggéré un son. J'ai suivi les conseils à la lettre → 180K vues. Valeur incroyable pour 1,99€.", niche: "Fitness", followers: "8K abonnés" },
-  { name: "Inès T.", city: "Bruxelles 🇧🇪", avatar: "I", rating: 5, date: "il y a 1 semaine", badge: "Abonnée vérifiée", text: "L'Early Detector m'a montré une vidéo à 9K vues. J'ai fait mon propre contenu → 95K vues le lendemain. Wavely c'est une arme secrète.", niche: "Mode", followers: "23K abonnés" },
-  { name: "Lucas R.", city: "Marseille 🇫🇷", avatar: "L", rating: 5, date: "il y a 2 semaines", badge: "Abonné vérifié", text: "Grâce aux captions générées par l'IA j'ai multiplié mes commentaires par 3. Le timing suggéré était parfait. Je recommande à 100% !", niche: "Tech", followers: "5K abonnés" },
-  { name: "Amira K.", city: "Casablanca 🇲🇦", avatar: "A", rating: 5, date: "il y a 3 semaines", badge: "Abonnée vérifiée", text: "En 1 mois j'ai triplé mes vues grâce aux trend radars. Mes créateurs préférés utilisent Wavely sans le dire 😂", niche: "Beauté", followers: "41K abonnés" },
-  { name: "Thomas V.", city: "Genève 🇨🇭", avatar: "T", rating: 4, date: "il y a 1 mois", badge: "Abonné vérifié", text: "Le Viral Score est bluffant de précision. Je l'utilise avant chaque vidéo. Pour 1,99€/mois c'est le meilleur investissement de ma carrière TikTok.", niche: "Finance", followers: "15K abonnés" },
+const viralFactors = [
+  { label: "Hook (0-3s)", score: 85, color: "#00f5d4" },
+  { label: "Trend Alignment", score: 72, color: "#f72585" },
+  { label: "Audio Match", score: 91, color: "#7209b7" },
+  { label: "Caption Power", score: 63, color: "#f9c74f" },
+  { label: "Posting Timing", score: 78, color: "#00f5d4" },
 ];
 
+
+const certifiedReviews = [
+  { name: "Sophia M.", city: "Paris 🇫🇷", avatar: "S", rating: 5, date: "il y a 2 jours", badge: "Abonnée vérifiée", text: "J'ai posté une vidéo exactement sur la trend que Wavely m'avait prédite 48h avant. Résultat : 340K vues en 24h. Jamais vu ça de ma vie 🤯", niche: "Lifestyle", followers: "12K abonnés", verified: true },
+  { name: "Karim B.", city: "Lyon 🇫🇷", avatar: "K", rating: 5, date: "il y a 5 jours", badge: "Abonné vérifié", text: "Le Viral Score m'a dit que mon idée avait 87/100 et m'a suggéré un son. J'ai suivi les conseils à la lettre → 180K vues. Valeur incroyable pour 1,99€.", niche: "Fitness", followers: "8K abonnés", verified: true },
+  { name: "Inès T.", city: "Bruxelles 🇧🇪", avatar: "I", rating: 5, date: "il y a 1 semaine", badge: "Abonnée vérifiée", text: "L'Early Detector m'a montré une vidéo à 9K vues. J'ai fait mon propre contenu dans la même niche → 95K vues le lendemain. Wavely c'est une arme secrète.", niche: "Mode", followers: "23K abonnés", verified: true },
+  { name: "Lucas R.", city: "Marseille 🇫🇷", avatar: "L", rating: 5, date: "il y a 2 semaines", badge: "Abonné vérifié", text: "Grâce aux captions générées par l'IA j'ai multiplié mes commentaires par 3. Le timing suggéré était parfait. Je recommande à 100% !", niche: "Tech", followers: "5K abonnés", verified: true },
+  { name: "Amira K.", city: "Casablanca 🇲🇦", avatar: "A", rating: 5, date: "il y a 3 semaines", badge: "Abonnée vérifiée", text: "Enfin une app qui prédit vraiment les tendances. En 1 mois j'ai triplé mes vues grâce aux trend radars. Mes créateurs préférés utilisent Wavely sans le dire 😂", niche: "Beauté", followers: "41K abonnés", verified: true },
+  { name: "Thomas V.", city: "Genève 🇨🇭", avatar: "T", rating: 4, date: "il y a 1 mois", badge: "Abonné vérifié", text: "Très bonne app. Le Viral Score est bluffant de précision. Je l'utilise avant chaque vidéo. Pour 1,99€/mois c'est honnêtement le meilleur investissement de ma carrière TikTok.", niche: "Finance", followers: "15K abonnés", verified: true },
+];
+
+const COUNTRY_CODES = [
+  { code: "+33", flag: "🇫🇷", name: "France" },
+  { code: "+32", flag: "🇧🇪", name: "Belgique" },
+  { code: "+41", flag: "🇨🇭", name: "Suisse" },
+  { code: "+1",  flag: "🇺🇸", name: "USA / Canada" },
+  { code: "+44", flag: "🇬🇧", name: "Royaume-Uni" },
+  { code: "+49", flag: "🇩🇪", name: "Allemagne" },
+  { code: "+34", flag: "🇪🇸", name: "Espagne" },
+  { code: "+39", flag: "🇮🇹", name: "Italie" },
+  { code: "+212", flag: "🇲🇦", name: "Maroc" },
+  { code: "+213", flag: "🇩🇿", name: "Algérie" },
+  { code: "+216", flag: "🇹🇳", name: "Tunisie" },
+];
+
+// ─── FIREBASE INIT ────────────────────────────────────────────────
+const firebaseApp = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
+const firebaseAuth = getAuth(firebaseApp);
+firebaseAuth.languageCode = "fr";
+
+// ─── CLAUDE AI VIRAL SCORE ────────────────────────────────────────
+async function analyzeWithClaude(idea) {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      system: `Tu es un expert en viralité TikTok. Analyse l'idée de vidéo et réponds UNIQUEMENT en JSON valide sans markdown ni backticks.
+Format exact:
+{"score":<0-100>,"verdict":"<emoji verdict>","factors":[{"label":"Hook (0-3s)","score":<0-100>,"color":"#00f5d4"},{"label":"Trend Alignment","score":<0-100>,"color":"#f72585"},{"label":"Audio Match","score":<0-100>,"color":"#7209b7"},{"label":"Caption Power","score":<0-100>,"color":"#f9c74f"},{"label":"Posting Timing","score":<0-100>,"color":"#00f5d4"}],"bestTime":"<créneau>","suggestedSound":"<son TikTok>","tip":"<conseil concret>","captions":["<caption1 avec hashtags>","<caption2>","<caption3>"]}`,
+      messages: [{ role: "user", content: `Idée TikTok : ${idea}` }]
+    })
+  });
+  const data = await response.json();
+  const text = data.content?.[0]?.text || "";
+  return JSON.parse(text);
+}
+
+// ─── PHONE AUTH SCREEN ────────────────────────────────────────────
+function PhoneAuthScreen({ onVerified, onClose }) {
+  const [step, setStep] = useState("phone");
+  const [country, setCountry] = useState(COUNTRY_CODES[0]);
+  const [showPicker, setShowPicker] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState(["","","","","",""]);
+  const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [error, setError] = useState("");
+  const confirmationRef = useRef(null);
+  const recaptchaRef = useRef(null);
+  const otpRefs = [useRef(),useRef(),useRef(),useRef(),useRef(),useRef()];
+
+  useEffect(() => {
+    if (countdown > 0) { const t = setTimeout(() => setCountdown(c => c-1), 1000); return () => clearTimeout(t); }
+  }, [countdown]);
+
+  const fullNumber = country.code + phone.replace(/^0/, "");
+
+  const setupRecaptcha = () => {
+    if (recaptchaRef.current) { try { recaptchaRef.current.clear(); } catch(e) {} }
+    recaptchaRef.current = new RecaptchaVerifier(firebaseAuth, "recaptcha-container", {
+      size: "invisible", callback: () => {}, "expired-callback": () => {}
+    });
+    return recaptchaRef.current;
+  };
+
+  const handleSend = async () => {
+    if (phone.length < 8) { setError("Numéro trop court"); return; }
+    setError(""); setSending(true);
+    try {
+      const verifier = setupRecaptcha();
+      confirmationRef.current = await signInWithPhoneNumber(firebaseAuth, fullNumber, verifier);
+      setStep("otp"); setCountdown(60);
+    } catch(e) {
+      setError(e.code === "auth/invalid-phone-number" ? "Numéro invalide" :
+               e.code === "auth/too-many-requests" ? "Trop de tentatives, réessayez plus tard" :
+               "Erreur envoi SMS. Vérifiez le numéro.");
+    } finally { setSending(false); }
+  };
+
+  const handleOtpInput = (val, idx) => {
+    const v = val.replace(/\D/,"").slice(0,1);
+    const next = [...otp]; next[idx] = v; setOtp(next);
+    if (v && idx < 5) otpRefs[idx+1].current?.focus();
+    if (!v && idx > 0) otpRefs[idx-1].current?.focus();
+  };
+
+  const handleVerify = async () => {
+    const code = otp.join("");
+    if (code.length < 6) { setError("Code incomplet (6 chiffres)"); return; }
+    setError(""); setVerifying(true);
+    try {
+      const result = await confirmationRef.current.confirm(code);
+      setStep("success");
+      setTimeout(() => onVerified(result.user.phoneNumber), 1000);
+    } catch(e) {
+      setError(e.code === "auth/invalid-verification-code" ? "Code incorrect" : "Vérification échouée");
+    } finally { setVerifying(false); }
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"#05040f",zIndex:300,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",fontFamily:"'DM Sans',sans-serif",overflowY:"auto"}}>
+      <div id="recaptcha-container" style={{position:"absolute",bottom:0}}/>
+      <div style={{position:"absolute",top:-80,left:-80,width:300,height:300,borderRadius:"50%",background:"rgba(0,245,212,0.07)",filter:"blur(80px)",pointerEvents:"none"}}/>
+      <div style={{width:"100%",maxWidth:340,position:"relative",zIndex:1}}>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(232,230,240,0.3)",fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:24}}>← Retour</button>
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <div style={{fontSize:36,marginBottom:8}}>🌊</div>
+          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:28,background:"linear-gradient(135deg,#00f5d4,#7209b7,#f72585)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WAVELY</div>
+          <div style={{fontSize:13,color:"rgba(232,230,240,0.4)",marginTop:6}}>
+            {step==="phone"&&"Entrez votre numéro de téléphone"}
+            {step==="otp"&&`Code envoyé au ${fullNumber}`}
+            {step==="success"&&"Numéro vérifié !"}
+          </div>
+        </div>
+
+        {step==="phone"&&(
+          <>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:"rgba(232,230,240,0.4)",textTransform:"uppercase",letterSpacing:"1px",marginBottom:8}}>Numéro de téléphone</div>
+              <div style={{display:"flex",gap:8,position:"relative"}}>
+                <button onClick={()=>setShowPicker(s=>!s)} style={{background:"rgba(255,255,255,0.06)",border:"1.5px solid rgba(0,245,212,0.2)",borderRadius:12,padding:"14px 12px",color:"#fff",fontSize:14,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'DM Sans',sans-serif",flexShrink:0}}>
+                  {country.flag} {country.code} ▾
+                </button>
+                {showPicker&&(
+                  <div style={{position:"absolute",top:"calc(100% + 6px)",left:0,background:"#0e0c1e",border:"1px solid rgba(0,245,212,0.15)",borderRadius:12,zIndex:50,width:220,boxShadow:"0 8px 32px rgba(0,0,0,0.6)",maxHeight:240,overflowY:"auto"}}>
+                    {COUNTRY_CODES.map((c,i)=>(
+                      <div key={i} onClick={()=>{setCountry(c);setShowPicker(false);}} style={{padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,fontSize:13,color:"rgba(232,230,240,0.8)",borderBottom:"1px solid rgba(255,255,255,0.04)",background:c.code===country.code?"rgba(0,245,212,0.08)":"transparent"}}>
+                        <span>{c.flag}</span><span style={{flex:1}}>{c.name}</span><span style={{color:"rgba(232,230,240,0.3)"}}>{c.code}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <input type="tel" placeholder="6 12 34 56 78" value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/,""))} onKeyDown={e=>e.key==="Enter"&&handleSend()}
+                  style={{flex:1,background:"rgba(255,255,255,0.06)",border:"1.5px solid rgba(0,245,212,0.2)",borderRadius:12,padding:"14px 16px",color:"#fff",fontSize:16,outline:"none",fontFamily:"'DM Sans',sans-serif"}}/>
+              </div>
+            </div>
+            {error&&<div style={{color:"#f72585",fontSize:12,marginBottom:10}}>{error}</div>}
+            <button onClick={handleSend} disabled={sending||phone.length<8}
+              style={{width:"100%",padding:16,borderRadius:14,background:sending||phone.length<8?"rgba(0,245,212,0.25)":"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,cursor:"pointer"}}>
+              {sending?"Envoi du SMS...":"Recevoir le code SMS →"}
+            </button>
+            <div style={{textAlign:"center",fontSize:11,color:"rgba(232,230,240,0.2)",marginTop:14,lineHeight:1.6}}>🔒 Utilisé uniquement pour l'authentification · Firebase sécurisé</div>
+          </>
+        )}
+
+        {step==="otp"&&(
+          <>
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:11,color:"rgba(232,230,240,0.4)",textTransform:"uppercase",letterSpacing:"1px",marginBottom:14,textAlign:"center"}}>Code à 6 chiffres</div>
+              <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+                {otp.map((digit,i)=>(
+                  <input key={i} ref={otpRefs[i]} type="tel" maxLength={1} value={digit}
+                    onChange={e=>handleOtpInput(e.target.value,i)}
+                    onPaste={e=>{const p=e.clipboardData.getData("text").replace(/\D/g,"").slice(0,6);if(p.length===6){setOtp(p.split(""));otpRefs[5].current?.focus();}}}
+                    onKeyDown={e=>{if(e.key==="Backspace"&&!digit&&i>0)otpRefs[i-1].current?.focus();}}
+                    style={{width:46,height:56,borderRadius:12,textAlign:"center",background:digit?"rgba(0,245,212,0.1)":"rgba(255,255,255,0.06)",border:digit?"1.5px solid rgba(0,245,212,0.5)":"1.5px solid rgba(255,255,255,0.1)",color:"#fff",fontSize:22,fontFamily:"'Syne',sans-serif",fontWeight:700,outline:"none"}}
+                  />
+                ))}
+              </div>
+            </div>
+            {error&&<div style={{color:"#f72585",fontSize:12,marginBottom:10,textAlign:"center"}}>{error}</div>}
+            <button onClick={handleVerify} disabled={verifying||otp.join("").length<6}
+              style={{width:"100%",padding:16,borderRadius:14,background:verifying||otp.join("").length<6?"rgba(0,245,212,0.25)":"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,cursor:"pointer",marginBottom:14}}>
+              {verifying?"Vérification...":"Confirmer le code →"}
+            </button>
+            <div style={{textAlign:"center"}}>
+              {countdown>0?<span style={{fontSize:12,color:"rgba(232,230,240,0.3)"}}>Renvoyer dans {countdown}s</span>
+                :<button onClick={()=>{handleSend();setOtp(["","","","","",""]);}} style={{background:"none",border:"none",color:"#00f5d4",fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>↺ Renvoyer le SMS</button>}
+            </div>
+            <button onClick={()=>{setStep("phone");setOtp(["","","","","",""]);setError("");}} style={{display:"block",margin:"12px auto 0",background:"none",border:"none",color:"rgba(232,230,240,0.3)",fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>← Modifier le numéro</button>
+          </>
+        )}
+
+        {step==="success"&&(
+          <div style={{textAlign:"center"}}>
+            <div style={{fontSize:60,marginBottom:16}}>✅</div>
+            <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:700,color:"#00f5d4",marginBottom:8}}>Numéro vérifié !</div>
+            <div style={{fontSize:13,color:"rgba(232,230,240,0.4)"}}>Redirection...</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────
 export default function Wavely() {
   const [activeTab, setActiveTab] = useState("forecast");
-  const [showOnboarding, setShowOnboarding] = useState(true);
   const [viralInput, setViralInput] = useState("");
-  const [analyzing, setAnalyzing] = useState(false);
   const [viralResult, setViralResult] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [authState, setAuthState] = useState("idle");
+  const [userPhone, setUserPhone] = useState(null);
   const [copiedCaption, setCopiedCaption] = useState(null);
-  const [authStep, setAuthStep] = useState("gate");
-  const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [verified, setVerified] = useState(false);
+
+  const handleVerified = (phone) => { setUserPhone(phone); setAuthState("verified"); setActiveTab("pro"); };
 
   const tabs = [
     { id: "forecast", label: "Trend Radar", icon: "📡" },
-    { id: "early", label: "Early", icon: "🔍" },
-    { id: "score", label: "Viral Score", icon: "⚡" },
-    { id: "avis", label: "Avis", icon: "⭐" },
-    { id: "pro", label: "S'abonner", icon: "💳" },
+    { id: "early",    label: "Early Detector", icon: "🔍" },
+    { id: "score",    label: "Viral Score", icon: "⚡" },
+    { id: "pro",      label: "S'abonner", icon: "💳" },
+    { id: "avis",     label: "Avis", icon: "⭐" },
   ];
 
-  const mockAnalyze = async () => {
-    setAnalyzing(true); setViralResult(null);
-    await new Promise(r => setTimeout(r, 2000));
-    setViralResult({
-      score: 87,
-      verdict: "🔥 Potentiel viral élevé !",
-      factors: [
-        { label: "Hook (0-3s)", score: 91, color: "#00f5d4" },
-        { label: "Trend Alignment", score: 85, color: "#f72585" },
-        { label: "Audio Match", score: 88, color: "#7209b7" },
-        { label: "Caption Power", score: 79, color: "#f9c74f" },
-        { label: "Posting Timing", score: 82, color: "#00f5d4" },
-      ],
-      bestTime: "Mardi–Jeudi · 19h–21h",
-      suggestedSound: "Espresso – Sabrina Carpenter (Sped Up)",
-      tip: "Commence avec un hook visuel fort dans les 2 premières secondes. Montre le résultat avant le processus.",
-      captions: [
-        "POV : tu surffes la vague avant tout le monde 🌊 #trending #creator #viral",
-        "Ce que personne ne te dit sur les tendances TikTok… 🤫 #tiktok #tips #contentcreator",
-        "J'ai testé la méthode Wavely pendant 7 jours — voilà les résultats 📈 #wavely #growth",
-      ]
-    });
-    setAnalyzing(false);
+  const analyzeViral = async () => {
+    if (!viralInput.trim()) return;
+    setAnalyzing(true); setViralResult(null); setAiError("");
+    try {
+      const result = await analyzeWithClaude(viralInput);
+      setViralResult(result);
+    } catch(e) {
+      setAiError("Erreur IA. Vérifiez votre connexion et réessayez.");
+    } finally { setAnalyzing(false); }
   };
 
   const copyCaption = (caption, idx) => {
+    navigator.clipboard?.writeText(caption).catch(()=>{});
     setCopiedCaption(idx);
     setTimeout(() => setCopiedCaption(null), 2000);
   };
 
-  const s = {
-    app: { fontFamily: "'system-ui',sans-serif", background: "#05040f", minHeight: "100vh", color: "#e8e6f0", maxWidth: 420, margin: "0 auto", position: "relative", overflowX: "hidden" },
-    header: { position: "sticky", top: 0, zIndex: 100, background: "rgba(5,4,15,0.92)", backdropFilter: "blur(20px)", padding: "14px 20px 10px", borderBottom: "1px solid rgba(0,245,212,0.1)" },
-    logo: { fontWeight: 800, fontSize: 24, letterSpacing: -1, background: "linear-gradient(135deg,#00f5d4,#7209b7,#f72585)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", display: "inline-block" },
-    liveBadge: { display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(247,37,133,0.15)", border: "1px solid rgba(247,37,133,0.3)", borderRadius: 20, padding: "3px 10px", fontSize: 11, color: "#f72585" },
-    tabBar: { display: "flex", gap: 4, padding: "10px 12px", overflowX: "auto", scrollbarWidth: "none" },
-    content: { padding: "8px 16px 100px" },
-    sectionTitle: { fontWeight: 800, fontSize: 17, marginBottom: 3, color: "#fff" },
-    sectionSub: { fontSize: 11, color: "rgba(232,230,240,0.4)", marginBottom: 14 },
-    trendCard: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 16, padding: "12px 14px", marginBottom: 10, display: "flex", alignItems: "center", gap: 12, position: "relative", overflow: "hidden" },
-    waveBar: { height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 4, marginTop: 6, overflow: "hidden" },
-    soundCard: { background: "rgba(114,9,183,0.1)", border: "1px solid rgba(114,9,183,0.25)", borderRadius: 14, padding: "11px 13px", marginBottom: 8, display: "flex", alignItems: "center", gap: 10 },
-    earlyCard: { background: "rgba(249,199,79,0.06)", border: "1px solid rgba(249,199,79,0.15)", borderRadius: 14, padding: "13px 14px", marginBottom: 10 },
-    reviewCard: { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 18, padding: 15, marginBottom: 11, position: "relative", overflow: "hidden" },
-    bottomNav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 420, background: "rgba(5,4,15,0.97)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", padding: "8px 0 16px", zIndex: 100 },
-  };
+  const css = `
+    ${FONTS}
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{background:#05040f}
+    .app{font-family:'DM Sans',sans-serif;background:#05040f;min-height:100vh;color:#e8e6f0;max-width:420px;margin:0 auto;position:relative;overflow-x:hidden}
+    .bg-grid{position:fixed;top:0;left:50%;transform:translateX(-50%);width:420px;height:100vh;background-image:linear-gradient(rgba(0,245,212,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,245,212,0.04) 1px,transparent 1px);background-size:32px 32px;pointer-events:none;z-index:0}
+    .glow-blob{position:fixed;border-radius:50%;filter:blur(80px);pointer-events:none;z-index:0}
+    .header{position:sticky;top:0;z-index:100;background:rgba(5,4,15,0.85);backdrop-filter:blur(20px);padding:16px 20px 12px;border-bottom:1px solid rgba(0,245,212,0.1)}
+    .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:26px;letter-spacing:-1px;background:linear-gradient(135deg,#00f5d4,#7209b7,#f72585);-webkit-background-clip:text;-webkit-text-fill-color:transparent;display:inline-block}
+    .logo-sub{font-size:11px;color:rgba(232,230,240,0.4);letter-spacing:2px;text-transform:uppercase;margin-top:2px}
+    .live-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(247,37,133,0.15);border:1px solid rgba(247,37,133,0.3);border-radius:20px;padding:3px 10px;font-size:11px;color:#f72585;font-weight:500}
+    .live-dot{width:6px;height:6px;border-radius:50%;background:#f72585;animation:blink 1.2s infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+    .tab-bar{display:flex;gap:4px;padding:12px 16px;overflow-x:auto;scrollbar-width:none}
+    .tab-bar::-webkit-scrollbar{display:none}
+    .tab{flex-shrink:0;display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.04);color:rgba(232,230,240,0.5);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s;font-family:'DM Sans',sans-serif}
+    .tab.active{background:rgba(0,245,212,0.12);border-color:rgba(0,245,212,0.4);color:#00f5d4}
+    .content{padding:8px 16px 100px;position:relative;z-index:1}
+    .section-title{font-family:'Syne',sans-serif;font-weight:700;font-size:18px;margin-bottom:4px;color:#fff}
+    .section-sub{font-size:12px;color:rgba(232,230,240,0.4);margin-bottom:16px}
+    .trend-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden}
+    .trend-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#00f5d4,#7209b7)}
+    .trend-card:hover{border-color:rgba(0,245,212,0.2);background:rgba(0,245,212,0.05);transform:translateX(3px)}
+    .wave-bar{height:4px;background:rgba(255,255,255,0.06);border-radius:4px;margin-top:8px;overflow:hidden}
+    .wave-fill{height:100%;background:linear-gradient(90deg,#00f5d4,#7209b7);border-radius:4px}
+    .sound-card{background:rgba(114,9,183,0.1);border:1px solid rgba(114,9,183,0.25);border-radius:14px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+    .sound-icon{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#7209b7,#f72585);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+    .early-card{background:rgba(249,199,79,0.06);border:1px solid rgba(249,199,79,0.15);border-radius:16px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:all 0.2s}
+    .early-card:hover{border-color:rgba(249,199,79,0.3);background:rgba(249,199,79,0.1)}
+    .niche-pill{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;background:rgba(0,245,212,0.1);border:1px solid rgba(0,245,212,0.2);color:#00f5d4}
+    .catch-btn{margin-left:auto;padding:5px 12px;border-radius:20px;background:rgba(249,199,79,0.12);border:1px solid rgba(249,199,79,0.3);color:#f9c74f;font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
+    .score-input-area{background:rgba(255,255,255,0.04);border:1.5px solid rgba(0,245,212,0.2);border-radius:16px;padding:14px 16px;margin-bottom:12px}
+    .score-label{font-size:12px;color:rgba(232,230,240,0.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+    .score-textarea{width:100%;background:transparent;border:none;outline:none;color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;resize:none;min-height:70px;line-height:1.5}
+    .score-textarea::placeholder{color:rgba(232,230,240,0.2)}
+    .analyze-btn{width:100%;padding:14px;border-radius:14px;background:linear-gradient(135deg,#00f5d4,#7209b7);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+    .analyze-btn:disabled{opacity:0.5;cursor:default}
+    .ai-badge{background:rgba(0,245,212,0.15);border:1px solid rgba(0,245,212,0.3);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;color:#00f5d4;letter-spacing:1px}
+    .result-card{background:rgba(0,245,212,0.06);border:1px solid rgba(0,245,212,0.2);border-radius:20px;padding:20px;margin-top:16px;animation:fadeUp 0.4s ease}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    .result-score-big{font-family:'Syne',sans-serif;font-size:64px;font-weight:800;background:linear-gradient(135deg,#00f5d4,#f72585);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1;text-align:center;margin-bottom:4px}
+    .factor-row{margin-bottom:10px}
+    .factor-label-row{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;color:rgba(232,230,240,0.6)}
+    .factor-bar{height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden}
+    .factor-fill{height:100%;border-radius:6px;transition:width 1.2s ease}
+    .caption-card{background:rgba(114,9,183,0.08);border:1px solid rgba(114,9,183,0.2);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;cursor:pointer;transition:all 0.2s}
+    .caption-card:hover{border-color:rgba(114,9,183,0.4);background:rgba(114,9,183,0.14)}
+    .caption-text{font-size:12px;color:rgba(232,230,240,0.8);line-height:1.5;flex:1}
+    .copy-btn{flex-shrink:0;padding:4px 10px;border-radius:20px;background:rgba(0,245,212,0.1);border:1px solid rgba(0,245,212,0.25);color:#00f5d4;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif}
+    .divider{height:1px;background:rgba(255,255,255,0.06);margin:20px 0}
+    .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:420px;background:rgba(5,4,15,0.95);backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,0.06);display:flex;padding:10px 0 20px;z-index:100}
+    .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:4px}
+    .nav-icon{font-size:20px}
+    .nav-label{font-size:10px;color:rgba(232,230,240,0.35);font-weight:500}
+    .nav-item.active .nav-label{color:#00f5d4}
+    .nav-item.active .nav-icon{filter:drop-shadow(0 0 6px #00f5d4)}
+    .onboarding{position:fixed;inset:0;background:rgba(5,4,15,0.97);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center}
+    .onb-wave{font-size:64px;margin-bottom:24px;animation:bounce 2s infinite}
+    @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+    .onb-title{font-family:'Syne',sans-serif;font-size:40px;font-weight:800;background:linear-gradient(135deg,#00f5d4,#7209b7,#f72585);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1.1;margin-bottom:12px}
+    .onb-tagline{font-size:16px;color:rgba(232,230,240,0.6);line-height:1.6;margin-bottom:32px;max-width:300px}
+    .onb-features{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px;margin-bottom:28px}
+    .onb-feat{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:12px 14px;text-align:left}
+    .onb-feat-text{font-size:13px;color:rgba(232,230,240,0.7);line-height:1.4}
+    .start-btn{width:100%;max-width:320px;padding:16px;border-radius:14px;background:linear-gradient(135deg,#00f5d4,#7209b7);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:16px;cursor:pointer}
+    .loading-dots{display:flex;gap:6px;justify-content:center;margin:20px 0}
+    .dot{width:8px;height:8px;border-radius:50%;background:#00f5d4;animation:dotBounce 1.2s infinite}
+    .dot:nth-child(2){animation-delay:0.2s;background:#7209b7}
+    .dot:nth-child(3){animation-delay:0.4s;background:#f72585}
+    @keyframes dotBounce{0%,100%{transform:scale(0.6);opacity:0.4}50%{transform:scale(1);opacity:1}}
+    .badge-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+    .badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600}
+    .badge-teal{background:rgba(0,245,212,0.12);border:1px solid rgba(0,245,212,0.25);color:#00f5d4}
+    .badge-pink{background:rgba(247,37,133,0.12);border:1px solid rgba(247,37,133,0.25);color:#f72585}
+    .badge-yellow{background:rgba(249,199,79,0.12);border:1px solid rgba(249,199,79,0.25);color:#f9c74f}
+    .phone-gate{background:rgba(0,245,212,0.05);border:1px solid rgba(0,245,212,0.15);border-radius:20px;padding:32px 20px;text-align:center;margin-bottom:16px}
+    .pay-hero{background:linear-gradient(135deg,rgba(0,245,212,0.1),rgba(114,9,183,0.15));border:1px solid rgba(0,245,212,0.25);border-radius:24px;padding:28px 22px;margin-bottom:16px;text-align:center}
+    .pay-price{font-family:'Syne',sans-serif;font-size:52px;font-weight:800;background:linear-gradient(135deg,#00f5d4,#f72585);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1;margin-bottom:4px}
+    .pay-features-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:24px;text-align:left}
+    .pay-feat{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(232,230,240,0.7)}
+    .stripe-btn{width:100%;padding:16px;border-radius:14px;background:linear-gradient(135deg,#00f5d4,#7209b7);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}
+
+    .review-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:18px;padding:16px;margin-bottom:12px;position:relative;overflow:hidden}
+    .review-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#00f5d4,#7209b7,#f72585)}
+    .review-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+    .review-avatar{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#00f5d4,#7209b7);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:#fff;flex-shrink:0}
+    .review-name{font-weight:600;font-size:14px;color:#fff}
+    .review-city{font-size:11px;color:rgba(232,230,240,0.4);margin-top:2px}
+    .review-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(0,245,212,0.1);border:1px solid rgba(0,245,212,0.25);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:600;color:#00f5d4;margin-top:4px}
+    .review-stars{display:flex;gap:2px;margin-left:auto}
+    .review-text{font-size:13px;color:rgba(232,230,240,0.75);line-height:1.6;margin-bottom:12px;font-style:italic}
+    .review-footer{display:flex;align-items:center;justify-content:space-between}
+    .review-niche{font-size:10px;font-weight:600;background:rgba(247,37,133,0.1);border:1px solid rgba(247,37,133,0.2);border-radius:20px;padding:2px 8px;color:#f72585}
+    .review-date{font-size:10px;color:rgba(232,230,240,0.25)}
+    .review-followers{font-size:10px;color:rgba(232,230,240,0.35)}
+    .trust-bar{background:linear-gradient(135deg,rgba(0,245,212,0.08),rgba(114,9,183,0.08));border:1px solid rgba(0,245,212,0.15);border-radius:16px;padding:16px;margin-bottom:20px;display:flex;gap:12px;align-items:center}
+    .trust-stat{flex:1;text-align:center}
+    .trust-num{font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:#00f5d4;line-height:1}
+    .trust-label{font-size:10px;color:rgba(232,230,240,0.4);margin-top:3px}
+    .rev-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px;color:rgba(232,230,240,0.6)}
+    .rev-amount{font-family:'Syne',sans-serif;font-weight:700;color:#00f5d4}
+  `;
 
   return (
-    <div style={s.app}>
-      {/* Glow blobs */}
-      <div style={{ position: "fixed", width: 300, height: 300, top: -100, left: -80, borderRadius: "50%", background: "rgba(0,245,212,0.07)", filter: "blur(80px)", pointerEvents: "none", zIndex: 0 }} />
-      <div style={{ position: "fixed", width: 250, height: 250, top: 300, right: -80, borderRadius: "50%", background: "rgba(114,9,183,0.09)", filter: "blur(80px)", pointerEvents: "none", zIndex: 0 }} />
+    <>
+      <style>{css}</style>
+      <div className="app">
+        <div className="bg-grid"/>
+        <div className="glow-blob" style={{width:300,height:300,top:-100,left:-80,background:"rgba(0,245,212,0.08)"}}/>
+        <div className="glow-blob" style={{width:250,height:250,top:300,right:-100,background:"rgba(114,9,183,0.1)"}}/>
 
-      {/* ONBOARDING */}
-      {showOnboarding && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(5,4,15,0.98)", zIndex: 200, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "32px 24px", textAlign: "center" }}>
-          <div style={{ fontSize: 60, marginBottom: 20, animation: "none" }}>🌊</div>
-          <div style={{ fontWeight: 800, fontSize: 38, background: "linear-gradient(135deg,#00f5d4,#7209b7,#f72585)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", lineHeight: 1.1, marginBottom: 10 }}>WAVELY</div>
-          <div style={{ fontSize: 15, color: "rgba(232,230,240,0.55)", lineHeight: 1.6, marginBottom: 28, maxWidth: 290 }}>Prédit les tendances TikTok avant qu'elles explosent.</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 9, width: "100%", maxWidth: 310, marginBottom: 26 }}>
-            {[["📡", "Trend Radar — 24–72h avant tout le monde"], ["🔍", "Early Detector — vidéos avant 50K vues"], ["⚡", "Viral Score IA — analyse réelle par Claude AI"], ["⭐", "Avis certifiés — 2 400+ créateurs satisfaits"]].map(([icon, text], i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: "11px 13px", textAlign: "left" }}>
-                <span style={{ fontSize: 20 }}>{icon}</span>
-                <span style={{ fontSize: 13, color: "rgba(232,230,240,0.7)" }}>{text}</span>
-              </div>
-            ))}
-          </div>
-          <button onClick={() => setShowOnboarding(false)} style={{ width: "100%", maxWidth: 310, padding: 15, borderRadius: 14, background: "linear-gradient(135deg,#00f5d4,#7209b7)", border: "none", color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
-            Attraper la vague →
-          </button>
-        </div>
-      )}
-
-      {/* HEADER */}
-      <div style={s.header}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={s.logo}>WAVELY</div>
-            <div style={{ fontSize: 10, color: "rgba(232,230,240,0.35)", letterSpacing: 2, textTransform: "uppercase", marginTop: 1 }}>Predict · Create · Dominate</div>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-            <div style={s.liveBadge}>
-              <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#f72585" }} />
-              Live AI
-            </div>
-            {verified && <div style={{ fontSize: 10, color: "rgba(0,245,212,0.8)" }}>✅ Connecté</div>}
-          </div>
-        </div>
-      </div>
-
-      {/* TAB BAR */}
-      <div style={s.tabBar}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setActiveTab(t.id)} style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 20, border: activeTab === t.id ? "1px solid rgba(0,245,212,0.4)" : "1px solid rgba(255,255,255,0.08)", background: activeTab === t.id ? "rgba(0,245,212,0.12)" : "rgba(255,255,255,0.04)", color: activeTab === t.id ? "#00f5d4" : "rgba(232,230,240,0.45)", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
-            {t.icon} {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* CONTENT */}
-      <div style={s.content}>
-
-        {/* ── TREND RADAR ── */}
-        {activeTab === "forecast" && (
-          <>
-            <div style={s.sectionTitle}>🔥 Tendances à venir</div>
-            <div style={s.sectionSub}>Prédictions IA — mise à jour toutes les 30 min</div>
-            <div style={{ display: "flex", gap: 7, marginBottom: 14, flexWrap: "wrap" }}>
-              {[["France 🇫🇷", "#00f5d4"], ["Monde 🌍", "#f72585"], ["Mon Niche", "#f9c74f"]].map(([label, color], i) => (
-                <span key={i} style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: `${color}18`, border: `1px solid ${color}40`, color }}>{label}</span>
+        {showOnboarding&&(
+          <div className="onboarding">
+            <div className="onb-wave">🌊</div>
+            <div className="onb-title">WAVELY</div>
+            <div className="onb-tagline">Prédit les tendances TikTok avant qu'elles explosent.</div>
+            <div className="onb-features">
+              {[["📡","Trend Radar — 24–72h avant tout le monde"],["🔍","Early Detector — vidéos avant 50K vues"],["⚡","Viral Score IA — analyse réelle par intelligence artificielle"]].map(([icon,text],i)=>(
+                <div key={i} className="onb-feat"><span style={{fontSize:22}}>{icon}</span><div className="onb-feat-text">{text}</div></div>
               ))}
             </div>
-            {trends.map((t, i) => (
-              <div key={i} style={s.trendCard}>
-                <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: "linear-gradient(180deg,#00f5d4,#7209b7)" }} />
-                <div style={{ fontSize: 22, marginLeft: 6 }}>{t.icon}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: "#fff" }}>{t.tag}</div>
-                  <div style={{ fontSize: 10, color: "rgba(232,230,240,0.4)", marginTop: 2 }}>{t.category} · Pic dans {t.peak}</div>
-                  <div style={s.waveBar}><div style={{ height: "100%", width: `${t.score}%`, background: "linear-gradient(90deg,#00f5d4,#7209b7)", borderRadius: 4 }} /></div>
-                </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 800, fontSize: 20, color: "#00f5d4", lineHeight: 1 }}>{t.score}</div>
-                  <div style={{ fontSize: 11, color: "#f72585", fontWeight: 600, marginTop: 2 }}>{t.delta}</div>
-                </div>
-              </div>
-            ))}
-            <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "18px 0" }} />
-            <div style={s.sectionTitle}>🎵 Sons en montée</div>
-            <div style={s.sectionSub}>À utiliser maintenant</div>
-            {sounds.map((s2, i) => (
-              <div key={i} style={s.soundCard}>
-                <div style={{ width: 38, height: 38, borderRadius: 10, background: "linear-gradient(135deg,#7209b7,#f72585)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, flexShrink: 0 }}>🎵</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s2.name}</div>
-                  <div style={{ fontSize: 10, color: "rgba(232,230,240,0.4)", marginTop: 2 }}>{s2.plays} · <span style={{ color: "#f72585" }}>{s2.rise}</span></div>
-                </div>
-                {s2.hot && <span style={{ fontSize: 11, fontWeight: 700, background: "linear-gradient(135deg,#f72585,#f9c74f)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>🔥 HOT</span>}
-              </div>
-            ))}
-          </>
+            <button className="start-btn" onClick={()=>setShowOnboarding(false)}>Attraper la vague →</button>
+          </div>
         )}
 
-        {/* ── EARLY DETECTOR ── */}
-        {activeTab === "early" && (
-          <>
-            <div style={s.sectionTitle}>🔍 Early Detector</div>
-            <div style={s.sectionSub}>Vidéos qui explosent — avant 50K vues</div>
-            {earlyVideos.map((v, i) => (
-              <div key={i} style={s.earlyCard}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#fff", flex: 1, marginRight: 10, lineHeight: 1.4 }}>{v.title}</div>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: "#f9c74f", whiteSpace: "nowrap" }}>{v.trend}</div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: 11, color: "rgba(232,230,240,0.4)" }}>👁 {v.views}</span>
-                  <span style={{ padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 600, background: "rgba(0,245,212,0.1)", border: "1px solid rgba(0,245,212,0.2)", color: "#00f5d4" }}>{v.niche}</span>
-                  <button style={{ marginLeft: "auto", padding: "4px 11px", borderRadius: 20, background: "rgba(249,199,79,0.12)", border: "1px solid rgba(249,199,79,0.3)", color: "#f9c74f", fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Surfer →</button>
-                </div>
-              </div>
-            ))}
-          </>
-        )}
+        {authState==="phone_auth"&&<PhoneAuthScreen onVerified={handleVerified} onClose={()=>setAuthState("idle")}/>}
 
-        {/* ── VIRAL SCORE ── */}
-        {activeTab === "score" && (
-          <>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
-              <div style={s.sectionTitle}>⚡ Viral Score</div>
-              <span style={{ background: "rgba(0,245,212,0.15)", border: "1px solid rgba(0,245,212,0.3)", borderRadius: 20, padding: "2px 8px", fontSize: 10, fontWeight: 700, color: "#00f5d4", letterSpacing: 1 }}>✦ IA RÉELLE</span>
+        <div className="header">
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+            <div>
+              <div className="logo">WAVELY</div>
+              <div className="logo-sub">Predict · Create · Dominate</div>
             </div>
-            <div style={s.sectionSub}>Décris ton idée — Claude IA analyse le potentiel viral</div>
-            <div style={{ background: "rgba(255,255,255,0.04)", border: "1.5px solid rgba(0,245,212,0.2)", borderRadius: 16, padding: "13px 15px", marginBottom: 11 }}>
-              <div style={{ fontSize: 10, color: "rgba(232,230,240,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 7 }}>Ton idée de vidéo TikTok</div>
-              <textarea value={viralInput} onChange={e => setViralInput(e.target.value)} placeholder="Ex: routine matinale silencieuse en POV, son lo-fi, 30s, dans ma cuisine..." rows={4}
-                style={{ width: "100%", background: "transparent", border: "none", outline: "none", color: "#fff", fontSize: 13, resize: "none", lineHeight: 1.5, fontFamily: "system-ui" }} />
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+              <div className="live-badge"><div className="live-dot"/>Live AI</div>
+              {userPhone&&<div style={{fontSize:10,color:"rgba(0,245,212,0.7)"}}>✅ Connecté</div>}
             </div>
-            <button onClick={mockAnalyze} disabled={analyzing || !viralInput.trim()}
-              style={{ width: "100%", padding: 13, borderRadius: 14, background: analyzing || !viralInput.trim() ? "rgba(0,245,212,0.25)" : "linear-gradient(135deg,#00f5d4,#7209b7)", border: "none", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              {analyzing ? <>Analyse IA en cours <span>⏳</span></> : "✦ Analyser avec l'IA"}
+          </div>
+        </div>
+
+        <div className="tab-bar">
+          {tabs.map(t=>(
+            <button key={t.id} className={`tab ${activeTab===t.id?"active":""}`} onClick={()=>setActiveTab(t.id)}>
+              {t.icon} {t.label}
             </button>
-            {viralResult && (
-              <div style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.2)", borderRadius: 20, padding: 18, marginTop: 14 }}>
-                <div style={{ fontWeight: 800, fontSize: 62, background: "linear-gradient(135deg,#00f5d4,#f72585)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", lineHeight: 1, textAlign: "center", marginBottom: 4 }}>{viralResult.score}</div>
-                <div style={{ textAlign: "center", fontSize: 17, fontWeight: 600, color: "#fff", marginBottom: 18 }}>{viralResult.verdict}</div>
-                {viralResult.factors.map((f, i) => (
-                  <div key={i} style={{ marginBottom: 9 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3, color: "rgba(232,230,240,0.6)" }}><span>{f.label}</span><span style={{ color: "#fff", fontWeight: 600 }}>{f.score}/100</span></div>
-                    <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 5, overflow: "hidden" }}><div style={{ height: "100%", width: `${f.score}%`, background: f.color, borderRadius: 5 }} /></div>
-                  </div>
-                ))}
-                <div style={{ marginTop: 13, padding: "11px 13px", background: "rgba(0,245,212,0.08)", border: "1px solid rgba(0,245,212,0.2)", borderRadius: 12, fontSize: 12, color: "rgba(232,230,240,0.85)", lineHeight: 1.5 }}>💡 <strong>Conseil IA :</strong> {viralResult.tip}</div>
-                <div style={{ marginTop: 9, padding: "11px 13px", background: "rgba(247,37,133,0.08)", border: "1px solid rgba(247,37,133,0.15)", borderRadius: 12, fontSize: 11, color: "rgba(232,230,240,0.7)", lineHeight: 1.6 }}>
-                  🎯 <strong>Meilleur moment :</strong> {viralResult.bestTime}<br />🎵 <strong>Son recommandé :</strong> {viralResult.suggestedSound}
-                </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "rgba(232,230,240,0.5)", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 9 }}>📝 Captions IA</div>
-                {viralResult.captions.map((caption, i) => (
-                  <div key={i} onClick={() => copyCaption(caption, i)} style={{ background: "rgba(114,9,183,0.08)", border: "1px solid rgba(114,9,183,0.2)", borderRadius: 12, padding: "11px 13px", marginBottom: 8, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 9, cursor: "pointer" }}>
-                    <div style={{ fontSize: 12, color: "rgba(232,230,240,0.8)", lineHeight: 1.5, flex: 1 }}>{caption}</div>
-                    <button style={{ flexShrink: 0, padding: "3px 9px", borderRadius: 20, background: "rgba(0,245,212,0.1)", border: "1px solid rgba(0,245,212,0.25)", color: "#00f5d4", fontSize: 10, fontWeight: 600, cursor: "pointer" }}>{copiedCaption === i ? "✅ Copié" : "Copier"}</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
+          ))}
+        </div>
 
-        {/* ── AVIS ── */}
-        {activeTab === "avis" && (
-          <>
-            <div style={s.sectionTitle}>⭐ Avis certifiés</div>
-            <div style={s.sectionSub}>Utilisateurs vérifiés · Abonnés Wavely Pro</div>
-            <div style={{ background: "linear-gradient(135deg,rgba(0,245,212,0.08),rgba(114,9,183,0.08))", border: "1px solid rgba(0,245,212,0.15)", borderRadius: 14, padding: 14, marginBottom: 16, display: "flex", gap: 10, alignItems: "center" }}>
-              {[["4.9", "⭐⭐⭐⭐⭐", "Note moyenne"], ["2.4K", "", "Avis vérifiés"], ["97%", "", "Satisfaits"]].map(([num, stars, label], i) => (
-                <div key={i} style={{ flex: 1, textAlign: "center", borderRight: i < 2 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-                  <div style={{ fontWeight: 800, fontSize: 20, color: "#00f5d4", lineHeight: 1 }}>{num}</div>
-                  {stars && <div style={{ fontSize: 10, margin: "2px 0" }}>{stars}</div>}
-                  <div style={{ fontSize: 10, color: "rgba(232,230,240,0.4)", marginTop: 2 }}>{label}</div>
+        <div className="content">
+          {activeTab==="forecast"&&(
+            <>
+              <div className="section-title">🔥 Tendances à venir</div>
+              <div className="section-sub">Prédictions IA — mise à jour toutes les 30 min</div>
+              <div className="badge-row">
+                <span className="badge badge-teal">France 🇫🇷</span>
+                <span className="badge badge-pink">Monde 🌍</span>
+                <span className="badge badge-yellow">Mon Niche</span>
+              </div>
+              {trends.map((t,i)=>(
+                <div key={i} className="trend-card">
+                  <div style={{fontSize:24}}>{t.icon}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,color:"#fff"}}>{t.tag}</div>
+                    <div style={{fontSize:11,color:"rgba(232,230,240,0.4)",marginTop:2}}>{t.category} · Pic dans {t.peak}</div>
+                    <div className="wave-bar"><div className="wave-fill" style={{width:`${t.score}%`}}/></div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:"#00f5d4",lineHeight:1}}>{t.score}</div>
+                    <div style={{fontSize:11,color:"#f72585",fontWeight:600,marginTop:2}}>{t.delta}</div>
+                  </div>
                 </div>
               ))}
-            </div>
-            <div style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.15)", borderRadius: 12, padding: "9px 13px", marginBottom: 14, display: "flex", alignItems: "center", gap: 9, fontSize: 12, color: "rgba(232,230,240,0.6)" }}>
-              <span style={{ fontSize: 17 }}>🛡️</span>
-              <span><strong style={{ color: "#00f5d4" }}>Avis 100% vérifiés</strong> — Authentifiés par numéro de téléphone Firebase.</span>
-            </div>
-            {certifiedReviews.map((r, i) => (
-              <div key={i} style={s.reviewCard}>
-                <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 2, background: "linear-gradient(90deg,#00f5d4,#7209b7,#f72585)" }} />
-                <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 10 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg,#00f5d4,#7209b7)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 15, color: "#fff", flexShrink: 0 }}>{r.avatar}</div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: "#fff" }}>{r.name}</div>
-                    <div style={{ fontSize: 10, color: "rgba(232,230,240,0.4)" }}>{r.city}</div>
-                    <div style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "rgba(0,245,212,0.1)", border: "1px solid rgba(0,245,212,0.25)", borderRadius: 20, padding: "1px 7px", fontSize: 9, fontWeight: 600, color: "#00f5d4", marginTop: 3 }}>✅ {r.badge}</div>
+              <div className="divider"/>
+              <div className="section-title">🎵 Sons en montée</div>
+              <div className="section-sub">À utiliser maintenant</div>
+              {sounds.map((s,i)=>(
+                <div key={i} className="sound-card">
+                  <div className="sound-icon">🎵</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:500,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
+                    <div style={{fontSize:11,color:"rgba(232,230,240,0.4)",marginTop:3}}>{s.plays} · <span style={{color:"#f72585"}}>{s.rise}</span></div>
                   </div>
-                  <div style={{ display: "flex", gap: 1 }}>{Array(r.rating).fill(0).map((_, j) => <span key={j} style={{ fontSize: 12 }}>⭐</span>)}</div>
+                  {s.hot&&<span style={{fontSize:12,fontWeight:700,background:"linear-gradient(135deg,#f72585,#f9c74f)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>🔥 HOT</span>}
                 </div>
-                <div style={{ fontSize: 12, color: "rgba(232,230,240,0.75)", lineHeight: 1.6, marginBottom: 10, fontStyle: "italic" }}>"{r.text}"</div>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: 10, fontWeight: 600, background: "rgba(247,37,133,0.1)", border: "1px solid rgba(247,37,133,0.2)", borderRadius: 20, padding: "2px 7px", color: "#f72585" }}>{r.niche}</span>
-                  <span style={{ fontSize: 10, color: "rgba(232,230,240,0.35)" }}>👥 {r.followers}</span>
-                  <span style={{ fontSize: 10, color: "rgba(232,230,240,0.25)" }}>{r.date}</span>
+              ))}
+            </>
+          )}
+
+          {activeTab==="early"&&(
+            <>
+              <div className="section-title">🔍 Early Detector</div>
+              <div className="section-sub">Vidéos qui explosent — avant 50K vues</div>
+              {earlyVideos.map((v,i)=>(
+                <div key={i} className="early-card">
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                    <div style={{fontSize:14,fontWeight:500,color:"#fff",flex:1,marginRight:10,lineHeight:1.4}}>{v.title}</div>
+                    <div style={{fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:700,color:"#f9c74f",whiteSpace:"nowrap"}}>{v.trend}</div>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{fontSize:12,color:"rgba(232,230,240,0.4)"}}>👁 {v.views}</div>
+                    <div className="niche-pill">{v.niche}</div>
+                    <button className="catch-btn">Surfer →</button>
+                  </div>
                 </div>
+              ))}
+            </>
+          )}
+
+          {activeTab==="score"&&(
+            <>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                <div className="section-title">⚡ Viral Score</div>
+                <span className="ai-badge">✦ IA RÉELLE</span>
               </div>
-            ))}
-            <div style={{ background: "linear-gradient(135deg,rgba(0,245,212,0.1),rgba(114,9,183,0.15))", border: "1px solid rgba(0,245,212,0.25)", borderRadius: 20, padding: 22, textAlign: "center", marginTop: 8 }}>
-              <div style={{ fontSize: 30, marginBottom: 10 }}>🌊</div>
-              <div style={{ fontWeight: 700, fontSize: 17, color: "#fff", marginBottom: 7 }}>Rejoignez 2 400+ créateurs</div>
-              <div style={{ fontSize: 12, color: "rgba(232,230,240,0.5)", marginBottom: 16, lineHeight: 1.5 }}>Commencez à surfer les tendances dès aujourd'hui</div>
-              <button onClick={() => setActiveTab("pro")} style={{ width: "100%", padding: 13, borderRadius: 14, background: "linear-gradient(135deg,#00f5d4,#7209b7)", border: "none", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                S'abonner pour 1,99 €/mois →
+              <div className="section-sub">Décris ton idée — Claude IA analyse le vrai potentiel viral</div>
+              <div className="score-input-area">
+                <div className="score-label">Ton idée de vidéo TikTok</div>
+                <textarea className="score-textarea" placeholder="Ex: routine matinale silencieuse en POV, son lo-fi, 30s, dans ma cuisine..." value={viralInput} onChange={e=>setViralInput(e.target.value)} rows={4}/>
+              </div>
+              <button className="analyze-btn" onClick={analyzeViral} disabled={analyzing||!viralInput.trim()}>
+                {analyzing?<><span>Analyse IA en cours</span><div style={{display:"flex",gap:4}}>{[0,1,2].map(i=><div key={i} style={{width:5,height:5,borderRadius:"50%",background:"#fff",animation:`dotBounce 1.2s ${i*0.2}s infinite`}}/>)}</div></>:<span>✦ Analyser avec l'IA</span>}
               </button>
-            </div>
-          </>
-        )}
-
-        {/* ── S'ABONNER ── */}
-        {activeTab === "pro" && (
-          <>
-            <div style={s.sectionTitle}>💳 Wavely Pro</div>
-            <div style={s.sectionSub}>{verified ? "✅ Numéro vérifié — Paiement Stripe" : "Vérification SMS · Paiement Stripe"}</div>
-            {!verified ? (
-              <div style={{ background: "rgba(0,245,212,0.05)", border: "1px solid rgba(0,245,212,0.15)", borderRadius: 20, padding: "28px 18px", textAlign: "center", marginBottom: 14 }}>
-                {authStep === "gate" && (
-                  <>
-                    <div style={{ fontSize: 44, marginBottom: 14 }}>📱</div>
-                    <div style={{ fontWeight: 700, fontSize: 18, color: "#fff", marginBottom: 8 }}>Connexion par SMS</div>
-                    <div style={{ fontSize: 12, color: "rgba(232,230,240,0.5)", lineHeight: 1.6, marginBottom: 22 }}>Entrez votre numéro pour recevoir un code SMS gratuit.</div>
-                    <input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+33 6 12 34 56 78" style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(0,245,212,0.2)", borderRadius: 12, padding: "13px 15px", color: "#fff", fontSize: 15, outline: "none", fontFamily: "system-ui", marginBottom: 12 }} />
-                    <button onClick={() => phone.length > 8 && setAuthStep("otp")} style={{ width: "100%", padding: 14, borderRadius: 14, background: phone.length > 8 ? "linear-gradient(135deg,#00f5d4,#7209b7)" : "rgba(0,245,212,0.2)", border: "none", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
-                      Recevoir le code SMS →
-                    </button>
-                    <div style={{ fontSize: 10, color: "rgba(232,230,240,0.2)", marginTop: 11 }}>🔒 Firebase · Aucune carte requise</div>
-                  </>
-                )}
-                {authStep === "otp" && (
-                  <>
-                    <div style={{ fontSize: 44, marginBottom: 14 }}>🔐</div>
-                    <div style={{ fontWeight: 700, fontSize: 17, color: "#fff", marginBottom: 6 }}>Code SMS envoyé</div>
-                    <div style={{ fontSize: 12, color: "rgba(232,230,240,0.4)", marginBottom: 18 }}>Entrez le code reçu au {phone}</div>
-                    <input value={otp} onChange={e => setOtp(e.target.value)} placeholder="_ _ _ _ _ _" maxLength={6} style={{ width: "100%", background: "rgba(255,255,255,0.06)", border: "1.5px solid rgba(0,245,212,0.3)", borderRadius: 12, padding: "13px 15px", color: "#fff", fontSize: 22, outline: "none", fontFamily: "system-ui", textAlign: "center", letterSpacing: 8, marginBottom: 12 }} />
-                    <button onClick={() => otp.length === 6 && setVerified(true)} style={{ width: "100%", padding: 14, borderRadius: 14, background: otp.length === 6 ? "linear-gradient(135deg,#00f5d4,#7209b7)" : "rgba(0,245,212,0.2)", border: "none", color: "#fff", fontWeight: 700, fontSize: 14, cursor: "pointer", marginBottom: 10 }}>
-                      Confirmer →
-                    </button>
-                    <button onClick={() => setAuthStep("gate")} style={{ background: "none", border: "none", color: "rgba(232,230,240,0.3)", fontSize: 12, cursor: "pointer" }}>← Modifier le numéro</button>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div style={{ background: "linear-gradient(135deg,rgba(0,245,212,0.1),rgba(114,9,183,0.15))", border: "1px solid rgba(0,245,212,0.25)", borderRadius: 24, padding: "26px 20px", marginBottom: 14, textAlign: "center" }}>
-                <div style={{ fontSize: 11, color: "rgba(0,245,212,0.8)", marginBottom: 14, background: "rgba(0,245,212,0.08)", border: "1px solid rgba(0,245,212,0.2)", borderRadius: 20, padding: "5px 13px", display: "inline-block" }}>✅ {phone}</div>
-                <div style={{ fontWeight: 800, fontSize: 50, background: "linear-gradient(135deg,#00f5d4,#f72585)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", lineHeight: 1, marginBottom: 4 }}>1,99 €</div>
-                <div style={{ fontSize: 12, color: "rgba(232,230,240,0.4)", marginBottom: 18 }}>par mois · annulable à tout moment</div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 7, marginBottom: 20, textAlign: "left" }}>
-                  {["📡 Trend Radar illimité", "🔍 Early Detector live", "⚡ Viral Score IA réel", "📝 Captions IA incluses", "🔔 Alertes temps réel", "🎵 Sons tendance", "🌍 48 marchés", "🔄 Mises à jour auto"].map((f, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "rgba(232,230,240,0.7)" }}><span>{f.split(" ")[0]}</span><span>{f.split(" ").slice(1).join(" ")}</span></div>
+              {aiError&&<div style={{background:"rgba(247,37,133,0.08)",border:"1px solid rgba(247,37,133,0.2)",borderRadius:12,padding:12,fontSize:12,color:"#f72585",marginTop:12}}>{aiError}</div>}
+              {viralResult&&(
+                <div className="result-card">
+                  <div className="result-score-big">{viralResult.score}</div>
+                  <div style={{textAlign:"center",fontSize:18,fontWeight:600,color:"#fff",marginBottom:20}}>{viralResult.verdict}</div>
+                  {viralResult.factors?.map((f,i)=>(
+                    <div key={i} className="factor-row">
+                      <div className="factor-label-row"><span>{f.label}</span><span style={{color:"#fff",fontWeight:600}}>{f.score}/100</span></div>
+                      <div className="factor-bar"><div className="factor-fill" style={{width:`${f.score}%`,background:f.color}}/></div>
+                    </div>
                   ))}
+                  {viralResult.tip&&<div style={{marginTop:14,padding:"12px 14px",background:"rgba(0,245,212,0.08)",border:"1px solid rgba(0,245,212,0.2)",borderRadius:12,fontSize:13,color:"rgba(232,230,240,0.85)",lineHeight:1.5}}>💡 <strong>Conseil IA :</strong> {viralResult.tip}</div>}
+                  <div style={{marginTop:10,padding:"12px 14px",background:"rgba(247,37,133,0.08)",border:"1px solid rgba(247,37,133,0.15)",borderRadius:12,fontSize:12,color:"rgba(232,230,240,0.7)",lineHeight:1.6}}>
+                    🎯 <strong>Meilleur moment :</strong> {viralResult.bestTime}<br/>🎵 <strong>Son recommandé :</strong> {viralResult.suggestedSound}
+                  </div>
+                  {viralResult.captions?.length>0&&(
+                    <>
+                      <div style={{fontSize:13,fontWeight:600,color:"rgba(232,230,240,0.6)",textTransform:"uppercase",letterSpacing:"1px",marginTop:18,marginBottom:10}}>📝 Captions générées par IA</div>
+                      {viralResult.captions.map((caption,i)=>(
+                        <div key={i} className="caption-card" onClick={()=>copyCaption(caption,i)}>
+                          <div className="caption-text">{caption}</div>
+                          <button className="copy-btn">{copiedCaption===i?"✅ Copié":"Copier"}</button>
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
-                <button style={{ width: "100%", padding: 15, borderRadius: 14, background: "linear-gradient(135deg,#00f5d4,#7209b7)", border: "none", color: "#fff", fontWeight: 700, fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 9 }}>
-                  <span>S'abonner pour 1,99 €/mois</span>
-                  <span style={{ background: "rgba(255,255,255,0.2)", borderRadius: 6, padding: "2px 7px", fontSize: 10, fontWeight: 800 }}>stripe</span>
-                </button>
-                <div style={{ fontSize: 10, color: "rgba(232,230,240,0.25)", marginTop: 10 }}>🔒 Paiement chiffré SSL · Géré par Stripe</div>
+              )}
+            </>
+          )}
+
+
+          {activeTab==="avis"&&(
+            <>
+              <div className="section-title">⭐ Avis certifiés</div>
+              <div className="section-sub">Utilisateurs vérifiés · Abonnés Wavely Pro</div>
+
+              {/* Trust stats bar */}
+              <div className="trust-bar">
+                <div className="trust-stat">
+                  <div className="trust-num">4.9</div>
+                  <div style={{display:"flex",gap:1,justifyContent:"center",margin:"3px 0"}}>{"⭐⭐⭐⭐⭐".split("").map((s,i)=><span key={i} style={{fontSize:10}}>{s}</span>)}</div>
+                  <div className="trust-label">Note moyenne</div>
+                </div>
+                <div style={{width:1,background:"rgba(255,255,255,0.06)",alignSelf:"stretch"}}/>
+                <div className="trust-stat">
+                  <div className="trust-num">2.4K</div>
+                  <div className="trust-label">Avis vérifiés</div>
+                </div>
+                <div style={{width:1,background:"rgba(255,255,255,0.06)",alignSelf:"stretch"}}/>
+                <div className="trust-stat">
+                  <div className="trust-num">97%</div>
+                  <div className="trust-label">Satisfaits</div>
+                </div>
               </div>
-            )}
-            <div style={{ background: "rgba(0,245,212,0.06)", border: "1px solid rgba(0,245,212,0.15)", borderRadius: 14, padding: 14 }}>
-              <div style={{ fontSize: 11, color: "rgba(232,230,240,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>📈 Simulation revenus</div>
-              {[[500, "~850 €"], [1000, "~1 700 €"], [5000, "~8 500 €"], [10000, "~17 000 €"]].map(([n, r], i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 7, fontSize: 12, color: "rgba(232,230,240,0.6)" }}>
-                  <span>{n.toLocaleString()} abonnés</span>
-                  <span style={{ fontWeight: 700, color: "#00f5d4" }}>{r}<span style={{ fontSize: 10, color: "rgba(232,230,240,0.3)", fontWeight: 400 }}>/mois</span></span>
+
+              {/* Certified badge */}
+              <div style={{background:"rgba(0,245,212,0.06)",border:"1px solid rgba(0,245,212,0.15)",borderRadius:12,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontSize:12,color:"rgba(232,230,240,0.6)"}}>
+                <span style={{fontSize:18}}>🛡️</span>
+                <span><strong style={{color:"#00f5d4"}}>Avis 100% vérifiés</strong> — Chaque avis provient d'un abonné Wavely Pro authentifié par numéro de téléphone.</span>
+              </div>
+
+              {/* Reviews */}
+              {certifiedReviews.map((r,i)=>(
+                <div key={i} className="review-card">
+                  <div className="review-header">
+                    <div className="review-avatar">{r.avatar}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div className="review-name">{r.name}</div>
+                      <div className="review-city">{r.city}</div>
+                      <div className="review-badge">✅ {r.badge}</div>
+                    </div>
+                    <div className="review-stars">
+                      {Array(r.rating).fill(0).map((_,i)=><span key={i} style={{fontSize:14}}>⭐</span>)}
+                    </div>
+                  </div>
+                  <div className="review-text">"{r.text}"</div>
+                  <div className="review-footer">
+                    <span className="review-niche">{r.niche}</span>
+                    <span className="review-followers">👥 {r.followers}</span>
+                    <span className="review-date">{r.date}</span>
+                  </div>
                 </div>
               ))}
-            </div>
-          </>
-        )}
-      </div>
 
-      {/* BOTTOM NAV */}
-      <div style={s.bottomNav}>
-        {tabs.map(t => (
-          <div key={t.id} onClick={() => setActiveTab(t.id)} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, cursor: "pointer", padding: 3 }}>
-            <span style={{ fontSize: 18, filter: activeTab === t.id ? "drop-shadow(0 0 6px #00f5d4)" : "none" }}>{t.icon}</span>
-            <span style={{ fontSize: 9, fontWeight: 500, color: activeTab === t.id ? "#00f5d4" : "rgba(232,230,240,0.3)" }}>{t.label}</span>
-          </div>
-        ))}
+              {/* CTA */}
+              <div style={{background:"linear-gradient(135deg,rgba(0,245,212,0.1),rgba(114,9,183,0.15))",border:"1px solid rgba(0,245,212,0.25)",borderRadius:20,padding:24,textAlign:"center",marginTop:8}}>
+                <div style={{fontSize:32,marginBottom:12}}>🌊</div>
+                <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:"#fff",marginBottom:8}}>Rejoignez 2 400+ créateurs</div>
+                <div style={{fontSize:13,color:"rgba(232,230,240,0.5)",marginBottom:20,lineHeight:1.5}}>Commencez à surfer les tendances dès aujourd'hui</div>
+                <button onClick={()=>setActiveTab("pro")} style={{width:"100%",padding:14,borderRadius:14,background:"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,cursor:"pointer"}}>
+                  S'abonner pour 1,99 €/mois →
+                </button>
+              </div>
+            </>
+          )}
+          {activeTab==="pro"&&(
+            <>
+              <div className="section-title">💳 Wavely Pro</div>
+              <div className="section-sub">{authState==="verified"?`✅ Connecté · ${userPhone}`:"Vérification SMS · Paiement Stripe"}</div>
+              {authState!=="verified"?(
+                <div className="phone-gate">
+                  <div style={{fontSize:48,marginBottom:16}}>📱</div>
+                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:700,color:"#fff",marginBottom:8}}>Connexion par SMS</div>
+                  <div style={{fontSize:13,color:"rgba(232,230,240,0.5)",lineHeight:1.6,marginBottom:24}}>Entrez votre numéro pour recevoir un code SMS et accéder à l'abonnement.</div>
+                  <button onClick={()=>setAuthState("phone_auth")} style={{width:"100%",padding:15,borderRadius:14,background:"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,cursor:"pointer",marginBottom:12}}>
+                    📱 Entrer mon numéro →
+                  </button>
+                  <div style={{fontSize:11,color:"rgba(232,230,240,0.2)"}}>🔒 Aucune carte requise avant vérification</div>
+                </div>
+              ):(
+                <div className="pay-hero">
+                  <div style={{fontSize:12,color:"rgba(0,245,212,0.8)",marginBottom:16,background:"rgba(0,245,212,0.08)",border:"1px solid rgba(0,245,212,0.2)",borderRadius:20,padding:"6px 14px",display:"inline-block"}}>✅ {userPhone}</div>
+                  <div className="pay-price">1,99 €</div>
+                  <div style={{fontSize:13,color:"rgba(232,230,240,0.4)",marginBottom:20}}>par mois · annulable à tout moment</div>
+                  <div className="pay-features-grid">
+                    {["📡 Trend Radar illimité","🔍 Early Detector live","⚡ Viral Score IA réel","📝 Captions IA incluses","🔔 Alertes temps réel","🎵 Sons tendance","🌍 48 marchés","🔄 Mises à jour auto"].map((f,i)=>(
+                      <div key={i} className="pay-feat"><span>{f.split(" ")[0]}</span><span>{f.split(" ").slice(1).join(" ")}</span></div>
+                    ))}
+                  </div>
+                  <button className="stripe-btn" onClick={()=>window.open(STRIPE_PAYMENT_LINK,"_blank")}>
+                    <span>S'abonner pour 1,99 €/mois</span>
+                    <span style={{background:"rgba(255,255,255,0.2)",borderRadius:6,padding:"2px 7px",fontSize:11,fontWeight:800}}>stripe</span>
+                  </button>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:11,color:"rgba(232,230,240,0.3)",marginTop:12}}>🔒 Paiement chiffré SSL · Géré par Stripe</div>
+                </div>
+              )}
+
+            </>
+          )}
+        </div>
+
+        <div className="bottom-nav">
+          {tabs.map(t=>(
+            <div key={t.id} className={`nav-item ${activeTab===t.id?"active":""}`} onClick={()=>setActiveTab(t.id)}>
+              <span className="nav-icon">{t.icon}</span>
+              <span className="nav-label">{t.label}</span>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
