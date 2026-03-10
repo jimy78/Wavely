@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, signInWithPhoneNumber, RecaptchaVerifier } from "firebase/auth";
+import { getAuth, signInWithPhoneNumber, RecaptchaVerifier, onAuthStateChanged, signOut } from "firebase/auth";
 
-// ─── FIREBASE CONFIG ──────────────────────────────────────────────
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyD4txUu4Ex55ERw3_w__eBV00cr-iRnLg4",
   authDomain: "wavely-eb418.firebaseapp.com",
@@ -12,7 +11,6 @@ const FIREBASE_CONFIG = {
   appId: "1:914889903752:web:891f46cce189e5a60f993d",
 };
 
-// ─── STRIPE CONFIG ────────────────────────────────────────────────
 const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/14AdRaedQguTacVfML1ZS02";
 
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap');`;
@@ -34,24 +32,14 @@ const earlyVideos = [
   { views: "12K", trend: "↑ 6x/h", title: "Barista art with protein shakes", niche: "Fitness" },
   { views: "6.1K", trend: "↑ 9x/h", title: "Morning routine avec lumière bleue", niche: "Wellbeing" },
 ];
-const viralFactors = [
-  { label: "Hook (0-3s)", score: 85, color: "#00f5d4" },
-  { label: "Trend Alignment", score: 72, color: "#f72585" },
-  { label: "Audio Match", score: 91, color: "#7209b7" },
-  { label: "Caption Power", score: 63, color: "#f9c74f" },
-  { label: "Posting Timing", score: 78, color: "#00f5d4" },
-];
-
-
 const certifiedReviews = [
-  { name: "Sophia M.", city: "Paris 🇫🇷", avatar: "S", rating: 5, date: "il y a 2 jours", badge: "Abonnée vérifiée", text: "J'ai posté une vidéo exactement sur la trend que Wavely m'avait prédite 48h avant. Résultat : 340K vues en 24h. Jamais vu ça de ma vie 🤯", niche: "Lifestyle", followers: "12K abonnés", verified: true },
-  { name: "Karim B.", city: "Lyon 🇫🇷", avatar: "K", rating: 5, date: "il y a 5 jours", badge: "Abonné vérifié", text: "Le Viral Score m'a dit que mon idée avait 87/100 et m'a suggéré un son. J'ai suivi les conseils à la lettre → 180K vues. Valeur incroyable pour 1,99€.", niche: "Fitness", followers: "8K abonnés", verified: true },
-  { name: "Inès T.", city: "Bruxelles 🇧🇪", avatar: "I", rating: 5, date: "il y a 1 semaine", badge: "Abonnée vérifiée", text: "L'Early Detector m'a montré une vidéo à 9K vues. J'ai fait mon propre contenu dans la même niche → 95K vues le lendemain. Wavely c'est une arme secrète.", niche: "Mode", followers: "23K abonnés", verified: true },
-  { name: "Lucas R.", city: "Marseille 🇫🇷", avatar: "L", rating: 5, date: "il y a 2 semaines", badge: "Abonné vérifié", text: "Grâce aux captions générées par l'IA j'ai multiplié mes commentaires par 3. Le timing suggéré était parfait. Je recommande à 100% !", niche: "Tech", followers: "5K abonnés", verified: true },
-  { name: "Amira K.", city: "Casablanca 🇲🇦", avatar: "A", rating: 5, date: "il y a 3 semaines", badge: "Abonnée vérifiée", text: "Enfin une app qui prédit vraiment les tendances. En 1 mois j'ai triplé mes vues grâce aux trend radars. Mes créateurs préférés utilisent Wavely sans le dire 😂", niche: "Beauté", followers: "41K abonnés", verified: true },
-  { name: "Thomas V.", city: "Genève 🇨🇭", avatar: "T", rating: 4, date: "il y a 1 mois", badge: "Abonné vérifié", text: "Très bonne app. Le Viral Score est bluffant de précision. Je l'utilise avant chaque vidéo. Pour 1,99€/mois c'est honnêtement le meilleur investissement de ma carrière TikTok.", niche: "Finance", followers: "15K abonnés", verified: true },
+  { name: "Sophia M.", city: "Paris 🇫🇷", avatar: "S", rating: 5, date: "il y a 2 jours", badge: "Abonnée vérifiée", text: "J'ai posté une vidéo exactement sur la trend que Wavely m'avait prédite 48h avant. Résultat : 340K vues en 24h. Jamais vu ça de ma vie 🤯", niche: "Lifestyle", followers: "12K abonnés" },
+  { name: "Karim B.", city: "Lyon 🇫🇷", avatar: "K", rating: 5, date: "il y a 5 jours", badge: "Abonné vérifié", text: "Le Viral Score m'a dit que mon idée avait 87/100 et m'a suggéré un son. J'ai suivi les conseils à la lettre → 180K vues. Valeur incroyable pour 1,99€.", niche: "Fitness", followers: "8K abonnés" },
+  { name: "Inès T.", city: "Bruxelles 🇧🇪", avatar: "I", rating: 5, date: "il y a 1 semaine", badge: "Abonnée vérifiée", text: "L'Early Detector m'a montré une vidéo à 9K vues. J'ai fait mon propre contenu → 95K vues le lendemain. Wavely c'est une arme secrète.", niche: "Mode", followers: "23K abonnés" },
+  { name: "Lucas R.", city: "Marseille 🇫🇷", avatar: "L", rating: 5, date: "il y a 2 semaines", badge: "Abonné vérifié", text: "Grâce aux captions générées par l'IA j'ai multiplié mes commentaires par 3. Le timing suggéré était parfait. Je recommande à 100% !", niche: "Tech", followers: "5K abonnés" },
+  { name: "Amira K.", city: "Casablanca 🇲🇦", avatar: "A", rating: 5, date: "il y a 3 semaines", badge: "Abonnée vérifiée", text: "En 1 mois j'ai triplé mes vues grâce aux trend radars. Mes créateurs préférés utilisent Wavely sans le dire 😂", niche: "Beauté", followers: "41K abonnés" },
+  { name: "Thomas V.", city: "Genève 🇨🇭", avatar: "T", rating: 4, date: "il y a 1 mois", badge: "Abonné vérifié", text: "Le Viral Score est bluffant de précision. Pour 1,99€/mois c'est le meilleur investissement de ma carrière TikTok.", niche: "Finance", followers: "15K abonnés" },
 ];
-
 const COUNTRY_CODES = [
   { code: "+33", flag: "🇫🇷", name: "France" },
   { code: "+32", flag: "🇧🇪", name: "Belgique" },
@@ -66,12 +54,12 @@ const COUNTRY_CODES = [
   { code: "+216", flag: "🇹🇳", name: "Tunisie" },
 ];
 
-// ─── FIREBASE INIT ────────────────────────────────────────────────
+// Firebase init
 const firebaseApp = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
 const firebaseAuth = getAuth(firebaseApp);
 firebaseAuth.languageCode = "fr";
 
-// ─── CLAUDE AI VIRAL SCORE ────────────────────────────────────────
+// Claude AI
 async function analyzeWithClaude(idea) {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -86,8 +74,7 @@ Format exact:
     })
   });
   const data = await response.json();
-  const text = data.content?.[0]?.text || "";
-  return JSON.parse(text);
+  return JSON.parse(data.content?.[0]?.text || "{}");
 }
 
 // ─── PHONE AUTH SCREEN ────────────────────────────────────────────
@@ -147,7 +134,7 @@ function PhoneAuthScreen({ onVerified, onClose }) {
     try {
       const result = await confirmationRef.current.confirm(code);
       setStep("success");
-      setTimeout(() => onVerified(result.user.phoneNumber), 1000);
+      setTimeout(() => onVerified(result.user), 1000);
     } catch(e) {
       setError(e.code === "auth/invalid-verification-code" ? "Code incorrect" : "Vérification échouée");
     } finally { setVerifying(false); }
@@ -156,9 +143,8 @@ function PhoneAuthScreen({ onVerified, onClose }) {
   return (
     <div style={{position:"fixed",inset:0,background:"#05040f",zIndex:300,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 24px",fontFamily:"'DM Sans',sans-serif",overflowY:"auto"}}>
       <div id="recaptcha-container" style={{position:"absolute",bottom:0}}/>
-      <div style={{position:"absolute",top:-80,left:-80,width:300,height:300,borderRadius:"50%",background:"rgba(0,245,212,0.07)",filter:"blur(80px)",pointerEvents:"none"}}/>
       <div style={{width:"100%",maxWidth:340,position:"relative",zIndex:1}}>
-        <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(232,230,240,0.3)",fontSize:13,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",marginBottom:24}}>← Retour</button>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(232,230,240,0.3)",fontSize:13,cursor:"pointer",marginBottom:24}}>← Retour</button>
         <div style={{textAlign:"center",marginBottom:32}}>
           <div style={{fontSize:36,marginBottom:8}}>🌊</div>
           <div style={{fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:28,background:"linear-gradient(135deg,#00f5d4,#7209b7,#f72585)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WAVELY</div>
@@ -174,7 +160,7 @@ function PhoneAuthScreen({ onVerified, onClose }) {
             <div style={{marginBottom:14}}>
               <div style={{fontSize:11,color:"rgba(232,230,240,0.4)",textTransform:"uppercase",letterSpacing:"1px",marginBottom:8}}>Numéro de téléphone</div>
               <div style={{display:"flex",gap:8,position:"relative"}}>
-                <button onClick={()=>setShowPicker(s=>!s)} style={{background:"rgba(255,255,255,0.06)",border:"1.5px solid rgba(0,245,212,0.2)",borderRadius:12,padding:"14px 12px",color:"#fff",fontSize:14,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"'DM Sans',sans-serif",flexShrink:0}}>
+                <button onClick={()=>setShowPicker(s=>!s)} style={{background:"rgba(255,255,255,0.06)",border:"1.5px solid rgba(0,245,212,0.2)",borderRadius:12,padding:"14px 12px",color:"#fff",fontSize:14,cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
                   {country.flag} {country.code} ▾
                 </button>
                 {showPicker&&(
@@ -187,7 +173,7 @@ function PhoneAuthScreen({ onVerified, onClose }) {
                   </div>
                 )}
                 <input type="tel" placeholder="6 12 34 56 78" value={phone} onChange={e=>setPhone(e.target.value.replace(/\D/,""))} onKeyDown={e=>e.key==="Enter"&&handleSend()}
-                  style={{flex:1,background:"rgba(255,255,255,0.06)",border:"1.5px solid rgba(0,245,212,0.2)",borderRadius:12,padding:"14px 16px",color:"#fff",fontSize:16,outline:"none",fontFamily:"'DM Sans',sans-serif"}}/>
+                  style={{flex:1,background:"rgba(255,255,255,0.06)",border:"1.5px solid rgba(0,245,212,0.2)",borderRadius:12,padding:"14px 16px",color:"#fff",fontSize:16,outline:"none"}}/>
               </div>
             </div>
             {error&&<div style={{color:"#f72585",fontSize:12,marginBottom:10}}>{error}</div>}
@@ -195,7 +181,7 @@ function PhoneAuthScreen({ onVerified, onClose }) {
               style={{width:"100%",padding:16,borderRadius:14,background:sending||phone.length<8?"rgba(0,245,212,0.25)":"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,cursor:"pointer"}}>
               {sending?"Envoi du SMS...":"Recevoir le code SMS →"}
             </button>
-            <div style={{textAlign:"center",fontSize:11,color:"rgba(232,230,240,0.2)",marginTop:14,lineHeight:1.6}}>🔒 Utilisé uniquement pour l'authentification · Firebase sécurisé</div>
+            <div style={{textAlign:"center",fontSize:11,color:"rgba(232,230,240,0.2)",marginTop:14}}>🔒 Utilisé uniquement pour l'authentification · Firebase sécurisé</div>
           </>
         )}
 
@@ -221,9 +207,9 @@ function PhoneAuthScreen({ onVerified, onClose }) {
             </button>
             <div style={{textAlign:"center"}}>
               {countdown>0?<span style={{fontSize:12,color:"rgba(232,230,240,0.3)"}}>Renvoyer dans {countdown}s</span>
-                :<button onClick={()=>{handleSend();setOtp(["","","","","",""]);}} style={{background:"none",border:"none",color:"#00f5d4",fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>↺ Renvoyer le SMS</button>}
+                :<button onClick={()=>{handleSend();setOtp(["","","","","",""]);}} style={{background:"none",border:"none",color:"#00f5d4",fontSize:12,cursor:"pointer"}}>↺ Renvoyer le SMS</button>}
             </div>
-            <button onClick={()=>{setStep("phone");setOtp(["","","","","",""]);setError("");}} style={{display:"block",margin:"12px auto 0",background:"none",border:"none",color:"rgba(232,230,240,0.3)",fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}}>← Modifier le numéro</button>
+            <button onClick={()=>{setStep("phone");setOtp(["","","","","",""]);setError("");}} style={{display:"block",margin:"12px auto 0",background:"none",border:"none",color:"rgba(232,230,240,0.3)",fontSize:12,cursor:"pointer"}}>← Modifier le numéro</button>
           </>
         )}
 
@@ -247,19 +233,70 @@ export default function Wavely() {
   const [analyzing, setAnalyzing] = useState(false);
   const [aiError, setAiError] = useState("");
   const [showOnboarding, setShowOnboarding] = useState(true);
-  const [authState, setAuthState] = useState("idle");
-  const [userPhone, setUserPhone] = useState(null);
+  const [showAuthScreen, setShowAuthScreen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isPro, setIsPro] = useState(false);
   const [copiedCaption, setCopiedCaption] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
 
-  const handleVerified = (phone) => { setUserPhone(phone); setAuthState("verified"); setActiveTab("pro"); };
+  // ✅ FIX 1 — Session persistante : Firebase mémorise la connexion automatiquement
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+      setCurrentUser(user);
+      setAuthLoading(false);
+      if (user) {
+        // Check if user has pro status saved
+        const proStatus = localStorage.getItem(`wavely_pro_${user.uid}`);
+        if (proStatus === "true") setIsPro(true);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const tabs = [
-    { id: "forecast", label: "Trend Radar", icon: "📡" },
-    { id: "early",    label: "Early Detector", icon: "🔍" },
-    { id: "score",    label: "Viral Score", icon: "⚡" },
-    { id: "pro",      label: "S'abonner", icon: "💳" },
-    { id: "avis",     label: "Avis", icon: "⭐" },
-  ];
+  // ✅ FIX 2 — Détection retour Stripe (?subscribed=true dans l'URL)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("subscribed") === "true") {
+      setShowSuccessBanner(true);
+      setActiveTab("forecast");
+      // Mark as pro if user is logged in
+      if (currentUser) {
+        localStorage.setItem(`wavely_pro_${currentUser.uid}`, "true");
+        setIsPro(true);
+      } else {
+        // Store pending pro status for when user logs in
+        localStorage.setItem("wavely_pending_pro", "true");
+      }
+      // Clean URL
+      window.history.replaceState({}, "", window.location.pathname);
+      setTimeout(() => setShowSuccessBanner(false), 5000);
+    }
+  }, [currentUser]);
+
+  // Check pending pro status when user logs in
+  useEffect(() => {
+    if (currentUser && localStorage.getItem("wavely_pending_pro") === "true") {
+      localStorage.setItem(`wavely_pro_${currentUser.uid}`, "true");
+      localStorage.removeItem("wavely_pending_pro");
+      setIsPro(true);
+    }
+  }, [currentUser]);
+
+  const handleVerified = (user) => {
+    setCurrentUser(user);
+    setShowAuthScreen(false);
+    setActiveTab("pro");
+  };
+
+  const handleLogout = async () => {
+    await signOut(firebaseAuth);
+    setCurrentUser(null);
+    setIsPro(false);
+  };
+
+  // ✅ FIX 3 — Lien Stripe avec redirection vers l'app après paiement
+  const stripeUrl = `${STRIPE_PAYMENT_LINK}?client_reference_id=${currentUser?.uid || "guest"}&success_url=${encodeURIComponent("https://wavely-sable.vercel.app?subscribed=true")}`;
 
   const analyzeViral = async () => {
     if (!viralInput.trim()) return;
@@ -277,6 +314,14 @@ export default function Wavely() {
     setCopiedCaption(idx);
     setTimeout(() => setCopiedCaption(null), 2000);
   };
+
+  const tabs = [
+    { id: "forecast", label: "Trend Radar", icon: "📡" },
+    { id: "early",    label: "Early", icon: "🔍" },
+    { id: "score",    label: "Viral Score", icon: "⚡" },
+    { id: "avis",     label: "Avis", icon: "⭐" },
+    { id: "pro",      label: "S'abonner", icon: "💳" },
+  ];
 
   const css = `
     ${FONTS}
@@ -298,17 +343,15 @@ export default function Wavely() {
     .content{padding:8px 16px 100px;position:relative;z-index:1}
     .section-title{font-family:'Syne',sans-serif;font-weight:700;font-size:18px;margin-bottom:4px;color:#fff}
     .section-sub{font-size:12px;color:rgba(232,230,240,0.4);margin-bottom:16px}
-    .trend-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden}
+    .trend-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:16px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px;position:relative;overflow:hidden}
     .trend-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#00f5d4,#7209b7)}
-    .trend-card:hover{border-color:rgba(0,245,212,0.2);background:rgba(0,245,212,0.05);transform:translateX(3px)}
     .wave-bar{height:4px;background:rgba(255,255,255,0.06);border-radius:4px;margin-top:8px;overflow:hidden}
     .wave-fill{height:100%;background:linear-gradient(90deg,#00f5d4,#7209b7);border-radius:4px}
     .sound-card{background:rgba(114,9,183,0.1);border:1px solid rgba(114,9,183,0.25);border-radius:14px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
     .sound-icon{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#7209b7,#f72585);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
-    .early-card{background:rgba(249,199,79,0.06);border:1px solid rgba(249,199,79,0.15);border-radius:16px;padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:all 0.2s}
-    .early-card:hover{border-color:rgba(249,199,79,0.3);background:rgba(249,199,79,0.1)}
+    .early-card{background:rgba(249,199,79,0.06);border:1px solid rgba(249,199,79,0.15);border-radius:16px;padding:14px 16px;margin-bottom:10px}
     .niche-pill{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;background:rgba(0,245,212,0.1);border:1px solid rgba(0,245,212,0.2);color:#00f5d4}
-    .catch-btn{margin-left:auto;padding:5px 12px;border-radius:20px;background:rgba(249,199,79,0.12);border:1px solid rgba(249,199,79,0.3);color:#f9c74f;font-size:11px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
+    .catch-btn{margin-left:auto;padding:5px 12px;border-radius:20px;background:rgba(249,199,79,0.12);border:1px solid rgba(249,199,79,0.3);color:#f9c74f;font-size:11px;font-weight:600;cursor:pointer}
     .score-input-area{background:rgba(255,255,255,0.04);border:1.5px solid rgba(0,245,212,0.2);border-radius:16px;padding:14px 16px;margin-bottom:12px}
     .score-label{font-size:12px;color:rgba(232,230,240,0.4);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
     .score-textarea{width:100%;background:transparent;border:none;outline:none;color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;resize:none;min-height:70px;line-height:1.5}
@@ -323,10 +366,9 @@ export default function Wavely() {
     .factor-label-row{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;color:rgba(232,230,240,0.6)}
     .factor-bar{height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden}
     .factor-fill{height:100%;border-radius:6px;transition:width 1.2s ease}
-    .caption-card{background:rgba(114,9,183,0.08);border:1px solid rgba(114,9,183,0.2);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;cursor:pointer;transition:all 0.2s}
-    .caption-card:hover{border-color:rgba(114,9,183,0.4);background:rgba(114,9,183,0.14)}
+    .caption-card{background:rgba(114,9,183,0.08);border:1px solid rgba(114,9,183,0.2);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;cursor:pointer}
     .caption-text{font-size:12px;color:rgba(232,230,240,0.8);line-height:1.5;flex:1}
-    .copy-btn{flex-shrink:0;padding:4px 10px;border-radius:20px;background:rgba(0,245,212,0.1);border:1px solid rgba(0,245,212,0.25);color:#00f5d4;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:'DM Sans',sans-serif}
+    .copy-btn{flex-shrink:0;padding:4px 10px;border-radius:20px;background:rgba(0,245,212,0.1);border:1px solid rgba(0,245,212,0.25);color:#00f5d4;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap}
     .divider{height:1px;background:rgba(255,255,255,0.06);margin:20px 0}
     .bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:420px;background:rgba(5,4,15,0.95);backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,0.06);display:flex;padding:10px 0 20px;z-index:100}
     .nav-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;padding:4px}
@@ -335,18 +377,13 @@ export default function Wavely() {
     .nav-item.active .nav-label{color:#00f5d4}
     .nav-item.active .nav-icon{filter:drop-shadow(0 0 6px #00f5d4)}
     .onboarding{position:fixed;inset:0;background:rgba(5,4,15,0.97);z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center}
-    .onb-wave{font-size:64px;margin-bottom:24px;animation:bounce 2s infinite}
-    @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+    .onb-wave{font-size:64px;margin-bottom:24px}
     .onb-title{font-family:'Syne',sans-serif;font-size:40px;font-weight:800;background:linear-gradient(135deg,#00f5d4,#7209b7,#f72585);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1.1;margin-bottom:12px}
     .onb-tagline{font-size:16px;color:rgba(232,230,240,0.6);line-height:1.6;margin-bottom:32px;max-width:300px}
     .onb-features{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px;margin-bottom:28px}
     .onb-feat{display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:12px 14px;text-align:left}
     .onb-feat-text{font-size:13px;color:rgba(232,230,240,0.7);line-height:1.4}
     .start-btn{width:100%;max-width:320px;padding:16px;border-radius:14px;background:linear-gradient(135deg,#00f5d4,#7209b7);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:16px;cursor:pointer}
-    .loading-dots{display:flex;gap:6px;justify-content:center;margin:20px 0}
-    .dot{width:8px;height:8px;border-radius:50%;background:#00f5d4;animation:dotBounce 1.2s infinite}
-    .dot:nth-child(2){animation-delay:0.2s;background:#7209b7}
-    .dot:nth-child(3){animation-delay:0.4s;background:#f72585}
     @keyframes dotBounce{0%,100%{transform:scale(0.6);opacity:0.4}50%{transform:scale(1);opacity:1}}
     .badge-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
     .badge{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600}
@@ -359,7 +396,6 @@ export default function Wavely() {
     .pay-features-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:24px;text-align:left}
     .pay-feat{display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(232,230,240,0.7)}
     .stripe-btn{width:100%;padding:16px;border-radius:14px;background:linear-gradient(135deg,#00f5d4,#7209b7);border:none;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px}
-
     .review-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);border-radius:18px;padding:16px;margin-bottom:12px;position:relative;overflow:hidden}
     .review-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#00f5d4,#7209b7,#f72585)}
     .review-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
@@ -371,15 +407,23 @@ export default function Wavely() {
     .review-text{font-size:13px;color:rgba(232,230,240,0.75);line-height:1.6;margin-bottom:12px;font-style:italic}
     .review-footer{display:flex;align-items:center;justify-content:space-between}
     .review-niche{font-size:10px;font-weight:600;background:rgba(247,37,133,0.1);border:1px solid rgba(247,37,133,0.2);border-radius:20px;padding:2px 8px;color:#f72585}
-    .review-date{font-size:10px;color:rgba(232,230,240,0.25)}
-    .review-followers{font-size:10px;color:rgba(232,230,240,0.35)}
     .trust-bar{background:linear-gradient(135deg,rgba(0,245,212,0.08),rgba(114,9,183,0.08));border:1px solid rgba(0,245,212,0.15);border-radius:16px;padding:16px;margin-bottom:20px;display:flex;gap:12px;align-items:center}
     .trust-stat{flex:1;text-align:center}
     .trust-num{font-family:'Syne',sans-serif;font-weight:800;font-size:22px;color:#00f5d4;line-height:1}
     .trust-label{font-size:10px;color:rgba(232,230,240,0.4);margin-top:3px}
-    .rev-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-size:13px;color:rgba(232,230,240,0.6)}
-    .rev-amount{font-family:'Syne',sans-serif;font-weight:700;color:#00f5d4}
+    .success-banner{position:fixed;top:0;left:50%;transform:translateX(-50%);width:420px;background:linear-gradient(135deg,#00f5d4,#7209b7);padding:14px 20px;text-align:center;z-index:500;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#fff;animation:slideDown 0.4s ease}
+    @keyframes slideDown{from{transform:translateX(-50%) translateY(-100%)}to{transform:translateX(-50%) translateY(0)}}
+    .pro-badge{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,rgba(0,245,212,0.2),rgba(114,9,183,0.2));border:1px solid rgba(0,245,212,0.4);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#00f5d4}
   `;
+
+  if (authLoading) return (
+    <div style={{background:"#05040f",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:40,marginBottom:16}}>🌊</div>
+        <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:800,background:"linear-gradient(135deg,#00f5d4,#7209b7)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>WAVELY</div>
+      </div>
+    </div>
+  );
 
   return (
     <>
@@ -389,13 +433,19 @@ export default function Wavely() {
         <div className="glow-blob" style={{width:300,height:300,top:-100,left:-80,background:"rgba(0,245,212,0.08)"}}/>
         <div className="glow-blob" style={{width:250,height:250,top:300,right:-100,background:"rgba(114,9,183,0.1)"}}/>
 
+        {/* ✅ Bannière succès paiement */}
+        {showSuccessBanner&&(
+          <div className="success-banner">🎉 Abonnement activé — Bienvenue dans Wavely Pro !</div>
+        )}
+
+        {/* Onboarding */}
         {showOnboarding&&(
           <div className="onboarding">
             <div className="onb-wave">🌊</div>
             <div className="onb-title">WAVELY</div>
             <div className="onb-tagline">Prédit les tendances TikTok avant qu'elles explosent.</div>
             <div className="onb-features">
-              {[["📡","Trend Radar — 24–72h avant tout le monde"],["🔍","Early Detector — vidéos avant 50K vues"],["⚡","Viral Score IA — analyse réelle par intelligence artificielle"]].map(([icon,text],i)=>(
+              {[["📡","Trend Radar — 24–72h avant tout le monde"],["🔍","Early Detector — vidéos avant 50K vues"],["⚡","Viral Score IA — analyse réelle par Claude AI"],["⭐","Avis certifiés — 2 400+ créateurs satisfaits"]].map(([icon,text],i)=>(
                 <div key={i} className="onb-feat"><span style={{fontSize:22}}>{icon}</span><div className="onb-feat-text">{text}</div></div>
               ))}
             </div>
@@ -403,21 +453,29 @@ export default function Wavely() {
           </div>
         )}
 
-        {authState==="phone_auth"&&<PhoneAuthScreen onVerified={handleVerified} onClose={()=>setAuthState("idle")}/>}
+        {/* Auth screen */}
+        {showAuthScreen&&<PhoneAuthScreen onVerified={handleVerified} onClose={()=>setShowAuthScreen(false)}/>}
 
+        {/* Header */}
         <div className="header">
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div>
               <div className="logo">WAVELY</div>
               <div className="logo-sub">Predict · Create · Dominate</div>
             </div>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5}}>
               <div className="live-badge"><div className="live-dot"/>Live AI</div>
-              {userPhone&&<div style={{fontSize:10,color:"rgba(0,245,212,0.7)"}}>✅ Connecté</div>}
+              {currentUser&&(
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  {isPro&&<div className="pro-badge">⚡ Pro</div>}
+                  <button onClick={handleLogout} style={{background:"none",border:"none",color:"rgba(232,230,240,0.3)",fontSize:10,cursor:"pointer"}}>Déconnexion</button>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
+        {/* Tabs */}
         <div className="tab-bar">
           {tabs.map(t=>(
             <button key={t.id} className={`tab ${activeTab===t.id?"active":""}`} onClick={()=>setActiveTab(t.id)}>
@@ -427,6 +485,8 @@ export default function Wavely() {
         </div>
 
         <div className="content">
+
+          {/* ── TREND RADAR ── */}
           {activeTab==="forecast"&&(
             <>
               <div className="section-title">🔥 Tendances à venir</div>
@@ -438,7 +498,7 @@ export default function Wavely() {
               </div>
               {trends.map((t,i)=>(
                 <div key={i} className="trend-card">
-                  <div style={{fontSize:24}}>{t.icon}</div>
+                  <div style={{fontSize:24,marginLeft:6}}>{t.icon}</div>
                   <div style={{flex:1}}>
                     <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,color:"#fff"}}>{t.tag}</div>
                     <div style={{fontSize:11,color:"rgba(232,230,240,0.4)",marginTop:2}}>{t.category} · Pic dans {t.peak}</div>
@@ -466,6 +526,7 @@ export default function Wavely() {
             </>
           )}
 
+          {/* ── EARLY ── */}
           {activeTab==="early"&&(
             <>
               <div className="section-title">🔍 Early Detector</div>
@@ -486,6 +547,7 @@ export default function Wavely() {
             </>
           )}
 
+          {/* ── VIRAL SCORE ── */}
           {activeTab==="score"&&(
             <>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
@@ -531,17 +593,15 @@ export default function Wavely() {
             </>
           )}
 
-
+          {/* ── AVIS ── */}
           {activeTab==="avis"&&(
             <>
               <div className="section-title">⭐ Avis certifiés</div>
               <div className="section-sub">Utilisateurs vérifiés · Abonnés Wavely Pro</div>
-
-              {/* Trust stats bar */}
               <div className="trust-bar">
                 <div className="trust-stat">
                   <div className="trust-num">4.9</div>
-                  <div style={{display:"flex",gap:1,justifyContent:"center",margin:"3px 0"}}>{"⭐⭐⭐⭐⭐".split("").map((s,i)=><span key={i} style={{fontSize:10}}>{s}</span>)}</div>
+                  <div style={{fontSize:10,margin:"2px 0"}}>⭐⭐⭐⭐⭐</div>
                   <div className="trust-label">Note moyenne</div>
                 </div>
                 <div style={{width:1,background:"rgba(255,255,255,0.06)",alignSelf:"stretch"}}/>
@@ -555,14 +615,10 @@ export default function Wavely() {
                   <div className="trust-label">Satisfaits</div>
                 </div>
               </div>
-
-              {/* Certified badge */}
               <div style={{background:"rgba(0,245,212,0.06)",border:"1px solid rgba(0,245,212,0.15)",borderRadius:12,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontSize:12,color:"rgba(232,230,240,0.6)"}}>
                 <span style={{fontSize:18}}>🛡️</span>
-                <span><strong style={{color:"#00f5d4"}}>Avis 100% vérifiés</strong> — Chaque avis provient d'un abonné Wavely Pro authentifié par numéro de téléphone.</span>
+                <span><strong style={{color:"#00f5d4"}}>Avis 100% vérifiés</strong> — Authentifiés par numéro de téléphone Firebase.</span>
               </div>
-
-              {/* Reviews */}
               {certifiedReviews.map((r,i)=>(
                 <div key={i} className="review-card">
                   <div className="review-header">
@@ -572,47 +628,53 @@ export default function Wavely() {
                       <div className="review-city">{r.city}</div>
                       <div className="review-badge">✅ {r.badge}</div>
                     </div>
-                    <div className="review-stars">
-                      {Array(r.rating).fill(0).map((_,i)=><span key={i} style={{fontSize:14}}>⭐</span>)}
-                    </div>
+                    <div className="review-stars">{Array(r.rating).fill(0).map((_,j)=><span key={j} style={{fontSize:14}}>⭐</span>)}</div>
                   </div>
                   <div className="review-text">"{r.text}"</div>
                   <div className="review-footer">
                     <span className="review-niche">{r.niche}</span>
-                    <span className="review-followers">👥 {r.followers}</span>
-                    <span className="review-date">{r.date}</span>
+                    <span style={{fontSize:10,color:"rgba(232,230,240,0.35)"}}>👥 {r.followers}</span>
+                    <span style={{fontSize:10,color:"rgba(232,230,240,0.25)"}}>{r.date}</span>
                   </div>
                 </div>
               ))}
-
-              {/* CTA */}
               <div style={{background:"linear-gradient(135deg,rgba(0,245,212,0.1),rgba(114,9,183,0.15))",border:"1px solid rgba(0,245,212,0.25)",borderRadius:20,padding:24,textAlign:"center",marginTop:8}}>
                 <div style={{fontSize:32,marginBottom:12}}>🌊</div>
                 <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:"#fff",marginBottom:8}}>Rejoignez 2 400+ créateurs</div>
-                <div style={{fontSize:13,color:"rgba(232,230,240,0.5)",marginBottom:20,lineHeight:1.5}}>Commencez à surfer les tendances dès aujourd'hui</div>
                 <button onClick={()=>setActiveTab("pro")} style={{width:"100%",padding:14,borderRadius:14,background:"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,cursor:"pointer"}}>
                   S'abonner pour 1,99 €/mois →
                 </button>
               </div>
             </>
           )}
+
+          {/* ── S'ABONNER ── */}
           {activeTab==="pro"&&(
             <>
               <div className="section-title">💳 Wavely Pro</div>
-              <div className="section-sub">{authState==="verified"?`✅ Connecté · ${userPhone}`:"Vérification SMS · Paiement Stripe"}</div>
-              {authState!=="verified"?(
-                <div className="phone-gate">
-                  <div style={{fontSize:48,marginBottom:16}}>📱</div>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:700,color:"#fff",marginBottom:8}}>Connexion par SMS</div>
-                  <div style={{fontSize:13,color:"rgba(232,230,240,0.5)",lineHeight:1.6,marginBottom:24}}>Entrez votre numéro pour recevoir un code SMS et accéder à l'abonnement.</div>
-                  <button onClick={()=>setAuthState("phone_auth")} style={{width:"100%",padding:15,borderRadius:14,background:"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,cursor:"pointer",marginBottom:12}}>
-                    📱 Entrer mon numéro →
+
+              {/* ✅ État connecté + Pro */}
+              {currentUser&&isPro&&(
+                <div style={{background:"linear-gradient(135deg,rgba(0,245,212,0.12),rgba(114,9,183,0.12))",border:"1px solid rgba(0,245,212,0.3)",borderRadius:20,padding:24,textAlign:"center",marginBottom:16}}>
+                  <div style={{fontSize:48,marginBottom:12}}>🏄</div>
+                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:"#00f5d4",marginBottom:6}}>Vous êtes Pro !</div>
+                  <div style={{fontSize:13,color:"rgba(232,230,240,0.6)",marginBottom:4}}>Connecté · {currentUser.phoneNumber}</div>
+                  <div style={{fontSize:12,color:"rgba(232,230,240,0.4)",marginBottom:20}}>Abonnement actif · 1,99 €/mois</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,textAlign:"left",marginBottom:16}}>
+                    {["📡 Trend Radar illimité","🔍 Early Detector live","⚡ Viral Score IA réel","📝 Captions IA incluses","🔔 Alertes temps réel","🎵 Sons tendance","🌍 48 marchés","🔄 Mises à jour auto"].map((f,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"rgba(232,230,240,0.8)"}}><span style={{color:"#00f5d4"}}>✓</span>{f.split(" ").slice(1).join(" ")}</div>
+                    ))}
+                  </div>
+                  <button onClick={()=>setActiveTab("forecast")} style={{width:"100%",padding:14,borderRadius:14,background:"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,cursor:"pointer"}}>
+                    Explorer les tendances →
                   </button>
-                  <div style={{fontSize:11,color:"rgba(232,230,240,0.2)"}}>🔒 Aucune carte requise avant vérification</div>
                 </div>
-              ):(
+              )}
+
+              {/* ✅ Connecté mais pas encore Pro */}
+              {currentUser&&!isPro&&(
                 <div className="pay-hero">
-                  <div style={{fontSize:12,color:"rgba(0,245,212,0.8)",marginBottom:16,background:"rgba(0,245,212,0.08)",border:"1px solid rgba(0,245,212,0.2)",borderRadius:20,padding:"6px 14px",display:"inline-block"}}>✅ {userPhone}</div>
+                  <div style={{fontSize:12,color:"rgba(0,245,212,0.8)",marginBottom:16,background:"rgba(0,245,212,0.08)",border:"1px solid rgba(0,245,212,0.2)",borderRadius:20,padding:"6px 14px",display:"inline-block"}}>✅ {currentUser.phoneNumber}</div>
                   <div className="pay-price">1,99 €</div>
                   <div style={{fontSize:13,color:"rgba(232,230,240,0.4)",marginBottom:20}}>par mois · annulable à tout moment</div>
                   <div className="pay-features-grid">
@@ -620,18 +682,31 @@ export default function Wavely() {
                       <div key={i} className="pay-feat"><span>{f.split(" ")[0]}</span><span>{f.split(" ").slice(1).join(" ")}</span></div>
                     ))}
                   </div>
-                  <button className="stripe-btn" onClick={()=>window.open(STRIPE_PAYMENT_LINK,"_blank")}>
+                  <button className="stripe-btn" onClick={()=>window.open(`${STRIPE_PAYMENT_LINK}?prefilled_phone=${encodeURIComponent(currentUser.phoneNumber||"")}`, "_blank")}>
                     <span>S'abonner pour 1,99 €/mois</span>
                     <span style={{background:"rgba(255,255,255,0.2)",borderRadius:6,padding:"2px 7px",fontSize:11,fontWeight:800}}>stripe</span>
                   </button>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,fontSize:11,color:"rgba(232,230,240,0.3)",marginTop:12}}>🔒 Paiement chiffré SSL · Géré par Stripe</div>
+                  <div style={{fontSize:11,color:"rgba(232,230,240,0.3)",marginTop:12}}>🔒 Paiement chiffré SSL · Géré par Stripe</div>
                 </div>
               )}
 
+              {/* Non connecté */}
+              {!currentUser&&(
+                <div className="phone-gate">
+                  <div style={{fontSize:48,marginBottom:16}}>📱</div>
+                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:700,color:"#fff",marginBottom:8}}>Connexion par SMS</div>
+                  <div style={{fontSize:13,color:"rgba(232,230,240,0.5)",lineHeight:1.6,marginBottom:24}}>Entrez votre numéro pour recevoir un code SMS et accéder à l'abonnement.</div>
+                  <button onClick={()=>setShowAuthScreen(true)} style={{width:"100%",padding:15,borderRadius:14,background:"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,cursor:"pointer",marginBottom:12}}>
+                    📱 Entrer mon numéro →
+                  </button>
+                  <div style={{fontSize:11,color:"rgba(232,230,240,0.2)"}}>🔒 Aucune carte requise avant vérification</div>
+                </div>
+              )}
             </>
           )}
         </div>
 
+        {/* Bottom nav */}
         <div className="bottom-nav">
           {tabs.map(t=>(
             <div key={t.id} className={`nav-item ${activeTab===t.id?"active":""}`} onClick={()=>setActiveTab(t.id)}>
