@@ -11,7 +11,7 @@ const FIREBASE_CONFIG = {
   appId: "1:914889903752:web:891f46cce189e5a60f993d",
 };
 
-const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/14AdRaedQguTacVfML1ZS02";
+const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/dRmcN6edQceD70J9on1ZS03";
 
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap');`;
 
@@ -54,12 +54,10 @@ const COUNTRY_CODES = [
   { code: "+216", flag: "🇹🇳", name: "Tunisie" },
 ];
 
-// Firebase init
 const firebaseApp = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
 const firebaseAuth = getAuth(firebaseApp);
 firebaseAuth.languageCode = "fr";
 
-// Claude AI
 async function analyzeWithClaude(idea) {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -77,7 +75,52 @@ Format exact:
   return JSON.parse(data.content?.[0]?.text || "{}");
 }
 
-// ─── PHONE AUTH SCREEN ────────────────────────────────────────────
+// ── PAYWALL MODAL ─────────────────────────────────────────────────
+function PaywallModal({ onClose, onSubscribe, feature }) {
+  const features = {
+    trend: { icon: "📡", title: "3 tendances cachées", desc: "Découvrez les 3 trends qui vont exploser dans les 24h — réservées Pro" },
+    early: { icon: "🔍", title: "Early Detector Pro", desc: "Accédez aux vidéos en train d'exploser avant 50K vues en temps réel" },
+    score: { icon: "⚡", title: "Analyses illimitées", desc: "Vous avez utilisé votre analyse gratuite. Passez Pro pour des scores illimités" },
+  };
+  const f = features[feature] || features.trend;
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(5,4,15,0.92)",backdropFilter:"blur(12px)",zIndex:400,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:420,background:"linear-gradient(180deg,#0e0c1e 0%,#05040f 100%)",border:"1px solid rgba(0,245,212,0.25)",borderBottom:"none",borderRadius:"24px 24px 0 0",padding:"28px 24px 40px",fontFamily:"'DM Sans',sans-serif",animation:"slideUp 0.3s ease"}}>
+        <div style={{width:40,height:4,background:"rgba(255,255,255,0.15)",borderRadius:4,margin:"0 auto 24px"}}/>
+        
+        {/* Feature highlight */}
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{fontSize:52,marginBottom:12}}>{f.icon}</div>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:"#fff",marginBottom:8}}>{f.title}</div>
+          <div style={{fontSize:14,color:"rgba(232,230,240,0.55)",lineHeight:1.6,maxWidth:280,margin:"0 auto"}}>{f.desc}</div>
+        </div>
+
+        {/* What you unlock */}
+        <div style={{background:"rgba(0,245,212,0.06)",border:"1px solid rgba(0,245,212,0.15)",borderRadius:16,padding:"16px 18px",marginBottom:20}}>
+          <div style={{fontSize:11,fontWeight:700,color:"rgba(0,245,212,0.7)",textTransform:"uppercase",letterSpacing:"1.5px",marginBottom:12}}>⚡ Avec Wavely Pro</div>
+          {[["📡","5 trends complètes + sons en montée"],["🔍","Early Detector en temps réel"],["⚡","Viral Score illimité par IA réelle"],["📝","3 captions IA par analyse"],["🔔","Alertes tendances personnalisées"]].map(([icon,text],i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,fontSize:13,color:"rgba(232,230,240,0.8)"}}>
+              <span>{icon}</span><span>{text}</span><span style={{marginLeft:"auto",color:"#00f5d4",fontSize:12}}>✓</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Price + CTA */}
+        <div style={{textAlign:"center",marginBottom:16}}>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:40,fontWeight:800,background:"linear-gradient(135deg,#00f5d4,#f72585)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",lineHeight:1}}>1,99 €</div>
+          <div style={{fontSize:12,color:"rgba(232,230,240,0.35)",marginBottom:16}}>par mois · annulable à tout moment</div>
+        </div>
+        <button onClick={onSubscribe} style={{width:"100%",padding:16,borderRadius:14,background:"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:16,cursor:"pointer",marginBottom:10,boxShadow:"0 8px 32px rgba(0,245,212,0.25)"}}>
+          🌊 Débloquer Wavely Pro →
+        </button>
+        <button onClick={onClose} style={{width:"100%",padding:10,background:"none",border:"none",color:"rgba(232,230,240,0.25)",fontSize:13,cursor:"pointer"}}>Peut-être plus tard</button>
+      </div>
+    </div>
+  );
+}
+
+// ── PHONE AUTH SCREEN ─────────────────────────────────────────────
 function PhoneAuthScreen({ onVerified, onClose }) {
   const [step, setStep] = useState("phone");
   const [country, setCountry] = useState(COUNTRY_CODES[0]);
@@ -225,7 +268,36 @@ function PhoneAuthScreen({ onVerified, onClose }) {
   );
 }
 
-// ─── MAIN APP ─────────────────────────────────────────────────────
+// ── LOCKED CARD ───────────────────────────────────────────────────
+function LockedCard({ onUnlock, label }) {
+  return (
+    <div onClick={onUnlock} style={{position:"relative",borderRadius:16,overflow:"hidden",marginBottom:10,cursor:"pointer",border:"1px solid rgba(114,9,183,0.3)"}}>
+      {/* Blurred fake content */}
+      <div style={{filter:"blur(5px)",opacity:0.4,background:"rgba(255,255,255,0.04)",padding:"14px 16px",display:"flex",alignItems:"center",gap:14}}>
+        <div style={{fontSize:24,marginLeft:6}}>🔥</div>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,color:"#fff",background:"rgba(255,255,255,0.3)",borderRadius:4,height:16,width:"60%",marginBottom:8}}/>
+          <div style={{background:"rgba(255,255,255,0.2)",borderRadius:4,height:10,width:"40%",marginBottom:8}}/>
+          <div style={{height:4,background:"rgba(255,255,255,0.1)",borderRadius:4}}/>
+        </div>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:"#00f5d4"}}>??</div>
+          <div style={{fontSize:11,color:"#f72585",fontWeight:600}}>+???%</div>
+        </div>
+      </div>
+      {/* Lock overlay */}
+      <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(5,4,15,0.55)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,rgba(114,9,183,0.9),rgba(247,37,133,0.9))",borderRadius:20,padding:"8px 16px",boxShadow:"0 4px 20px rgba(114,9,183,0.4)"}}>
+          <span style={{fontSize:14}}>🔒</span>
+          <span style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:13,color:"#fff"}}>{label || "Débloquer Pro"}</span>
+          <span style={{fontSize:12,color:"rgba(255,255,255,0.7)"}}>→</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────────
 export default function Wavely() {
   const [activeTab, setActiveTab] = useState("forecast");
   const [viralInput, setViralInput] = useState("");
@@ -239,42 +311,42 @@ export default function Wavely() {
   const [copiedCaption, setCopiedCaption] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [paywall, setPaywall] = useState(null); // null | "trend" | "early" | "score"
+  const [freeScoreUsed, setFreeScoreUsed] = useState(false);
 
-  // ✅ FIX 1 — Session persistante : Firebase mémorise la connexion automatiquement
+  // Session persistante
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
       setCurrentUser(user);
       setAuthLoading(false);
       if (user) {
-        // Check if user has pro status saved
         const proStatus = localStorage.getItem(`wavely_pro_${user.uid}`);
         if (proStatus === "true") setIsPro(true);
       }
     });
+    // Check free score usage (par appareil)
+    const used = localStorage.getItem("wavely_free_score_used");
+    if (used === "true") setFreeScoreUsed(true);
     return () => unsubscribe();
   }, []);
 
-  // ✅ FIX 2 — Détection retour Stripe (?subscribed=true dans l'URL)
+  // Détection retour Stripe
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("subscribed") === "true") {
       setShowSuccessBanner(true);
       setActiveTab("forecast");
-      // Mark as pro if user is logged in
       if (currentUser) {
         localStorage.setItem(`wavely_pro_${currentUser.uid}`, "true");
         setIsPro(true);
       } else {
-        // Store pending pro status for when user logs in
         localStorage.setItem("wavely_pending_pro", "true");
       }
-      // Clean URL
       window.history.replaceState({}, "", window.location.pathname);
       setTimeout(() => setShowSuccessBanner(false), 5000);
     }
   }, [currentUser]);
 
-  // Check pending pro status when user logs in
   useEffect(() => {
     if (currentUser && localStorage.getItem("wavely_pending_pro") === "true") {
       localStorage.setItem(`wavely_pro_${currentUser.uid}`, "true");
@@ -295,15 +367,24 @@ export default function Wavely() {
     setIsPro(false);
   };
 
-  // ✅ FIX 3 — Lien Stripe avec redirection vers l'app après paiement
-  const stripeUrl = `${STRIPE_PAYMENT_LINK}?client_reference_id=${currentUser?.uid || "guest"}&success_url=${encodeURIComponent("https://wavely-sable.vercel.app?subscribed=true")}`;
+  const goSubscribe = () => {
+    setPaywall(null);
+    setActiveTab("pro");
+  };
 
   const analyzeViral = async () => {
     if (!viralInput.trim()) return;
+    // Vérif paywall score
+    if (!isPro && freeScoreUsed) { setPaywall("score"); return; }
     setAnalyzing(true); setViralResult(null); setAiError("");
     try {
       const result = await analyzeWithClaude(viralInput);
       setViralResult(result);
+      // Marquer l'analyse gratuite utilisée
+      if (!isPro) {
+        localStorage.setItem("wavely_free_score_used", "true");
+        setFreeScoreUsed(true);
+      }
     } catch(e) {
       setAiError("Erreur IA. Vérifiez votre connexion et réessayez.");
     } finally { setAnalyzing(false); }
@@ -347,6 +428,7 @@ export default function Wavely() {
     .trend-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#00f5d4,#7209b7)}
     .wave-bar{height:4px;background:rgba(255,255,255,0.06);border-radius:4px;margin-top:8px;overflow:hidden}
     .wave-fill{height:100%;background:linear-gradient(90deg,#00f5d4,#7209b7);border-radius:4px}
+    .free-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(0,245,212,0.1);border:1px solid rgba(0,245,212,0.3);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;color:#00f5d4;margin-left:8px}
     .sound-card{background:rgba(114,9,183,0.1);border:1px solid rgba(114,9,183,0.25);border-radius:14px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:12px}
     .sound-icon{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#7209b7,#f72585);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
     .early-card{background:rgba(249,199,79,0.06);border:1px solid rgba(249,199,79,0.15);border-radius:16px;padding:14px 16px;margin-bottom:10px}
@@ -361,6 +443,7 @@ export default function Wavely() {
     .ai-badge{background:rgba(0,245,212,0.15);border:1px solid rgba(0,245,212,0.3);border-radius:20px;padding:2px 8px;font-size:10px;font-weight:700;color:#00f5d4;letter-spacing:1px}
     .result-card{background:rgba(0,245,212,0.06);border:1px solid rgba(0,245,212,0.2);border-radius:20px;padding:20px;margin-top:16px;animation:fadeUp 0.4s ease}
     @keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
     .result-score-big{font-family:'Syne',sans-serif;font-size:64px;font-weight:800;background:linear-gradient(135deg,#00f5d4,#f72585);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1;text-align:center;margin-bottom:4px}
     .factor-row{margin-bottom:10px}
     .factor-label-row{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;color:rgba(232,230,240,0.6)}
@@ -414,6 +497,8 @@ export default function Wavely() {
     .success-banner{position:fixed;top:0;left:50%;transform:translateX(-50%);width:420px;background:linear-gradient(135deg,#00f5d4,#7209b7);padding:14px 20px;text-align:center;z-index:500;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#fff;animation:slideDown 0.4s ease}
     @keyframes slideDown{from{transform:translateX(-50%) translateY(-100%)}to{transform:translateX(-50%) translateY(0)}}
     .pro-badge{display:inline-flex;align-items:center;gap:4px;background:linear-gradient(135deg,rgba(0,245,212,0.2),rgba(114,9,183,0.2));border:1px solid rgba(0,245,212,0.4);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;color:#00f5d4}
+    .early-blocked{background:linear-gradient(135deg,rgba(249,199,79,0.06),rgba(247,37,133,0.06));border:1px solid rgba(247,37,133,0.2);border-radius:20px;padding:32px 20px;text-align:center;cursor:pointer}
+    .early-blocked:hover{border-color:rgba(247,37,133,0.4)}
   `;
 
   if (authLoading) return (
@@ -433,19 +518,20 @@ export default function Wavely() {
         <div className="glow-blob" style={{width:300,height:300,top:-100,left:-80,background:"rgba(0,245,212,0.08)"}}/>
         <div className="glow-blob" style={{width:250,height:250,top:300,right:-100,background:"rgba(114,9,183,0.1)"}}/>
 
-        {/* ✅ Bannière succès paiement */}
         {showSuccessBanner&&(
           <div className="success-banner">🎉 Abonnement activé — Bienvenue dans Wavely Pro !</div>
         )}
 
-        {/* Onboarding */}
+        {/* Paywall Modal */}
+        {paywall&&<PaywallModal feature={paywall} onClose={()=>setPaywall(null)} onSubscribe={goSubscribe}/>}
+
         {showOnboarding&&(
           <div className="onboarding">
             <div className="onb-wave">🌊</div>
             <div className="onb-title">WAVELY</div>
             <div className="onb-tagline">Prédit les tendances TikTok avant qu'elles explosent.</div>
             <div className="onb-features">
-              {[["📡","Trend Radar — 24–72h avant tout le monde"],["🔍","Early Detector — vidéos avant 50K vues"],["⚡","Viral Score IA — analyse réelle par Claude AI"],["⭐","Avis certifiés — 2 400+ créateurs satisfaits"]].map(([icon,text],i)=>(
+              {[["📡","Trend Radar — 24–72h avant tout le monde"],["🔍","Early Detector — vidéos avant 50K vues"],["⚡","1 Viral Score gratuit — analyse IA réelle"],["⭐","Avis certifiés — 2 400+ créateurs satisfaits"]].map(([icon,text],i)=>(
                 <div key={i} className="onb-feat"><span style={{fontSize:22}}>{icon}</span><div className="onb-feat-text">{text}</div></div>
               ))}
             </div>
@@ -453,7 +539,6 @@ export default function Wavely() {
           </div>
         )}
 
-        {/* Auth screen */}
         {showAuthScreen&&<PhoneAuthScreen onVerified={handleVerified} onClose={()=>setShowAuthScreen(false)}/>}
 
         {/* Header */}
@@ -496,7 +581,37 @@ export default function Wavely() {
                 <span className="badge badge-pink">Monde 🌍</span>
                 <span className="badge badge-yellow">Mon Niche</span>
               </div>
-              {trends.map((t,i)=>(
+
+              {/* 2 trends GRATUITES */}
+              {trends.slice(0,2).map((t,i)=>(
+                <div key={i} className="trend-card">
+                  <div style={{fontSize:24,marginLeft:6}}>{t.icon}</div>
+                  <div style={{flex:1}}>
+                    <div style={{fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:15,color:"#fff",display:"flex",alignItems:"center"}}>
+                      {t.tag}
+                      <span className="free-badge">✓ Gratuit</span>
+                    </div>
+                    <div style={{fontSize:11,color:"rgba(232,230,240,0.4)",marginTop:2}}>{t.category} · Pic dans {t.peak}</div>
+                    <div className="wave-bar"><div className="wave-fill" style={{width:`${t.score}%`}}/></div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:"#00f5d4",lineHeight:1}}>{t.score}</div>
+                    <div style={{fontSize:11,color:"#f72585",fontWeight:600,marginTop:2}}>{t.delta}</div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Séparateur Pro */}
+              {!isPro&&(
+                <div style={{display:"flex",alignItems:"center",gap:10,margin:"4px 0 8px"}}>
+                  <div style={{flex:1,height:1,background:"rgba(114,9,183,0.3)"}}/>
+                  <div style={{fontSize:11,fontWeight:700,color:"rgba(114,9,183,0.8)",background:"rgba(114,9,183,0.1)",border:"1px solid rgba(114,9,183,0.3)",borderRadius:20,padding:"3px 10px"}}>🔒 3 tendances Pro</div>
+                  <div style={{flex:1,height:1,background:"rgba(114,9,183,0.3)"}}/>
+                </div>
+              )}
+
+              {/* 3 trends BLOQUÉES ou débloquées */}
+              {isPro ? trends.slice(2).map((t,i)=>(
                 <div key={i} className="trend-card">
                   <div style={{fontSize:24,marginLeft:6}}>{t.icon}</div>
                   <div style={{flex:1}}>
@@ -509,20 +624,36 @@ export default function Wavely() {
                     <div style={{fontSize:11,color:"#f72585",fontWeight:600,marginTop:2}}>{t.delta}</div>
                   </div>
                 </div>
-              ))}
-              <div className="divider"/>
-              <div className="section-title">🎵 Sons en montée</div>
-              <div className="section-sub">À utiliser maintenant</div>
-              {sounds.map((s,i)=>(
-                <div key={i} className="sound-card">
-                  <div className="sound-icon">🎵</div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:500,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
-                    <div style={{fontSize:11,color:"rgba(232,230,240,0.4)",marginTop:3}}>{s.plays} · <span style={{color:"#f72585"}}>{s.rise}</span></div>
+              )) : (
+                <>
+                  <LockedCard onUnlock={()=>setPaywall("trend")} label="Voir cette tendance Pro"/>
+                  <LockedCard onUnlock={()=>setPaywall("trend")} label="Voir cette tendance Pro"/>
+                  <LockedCard onUnlock={()=>setPaywall("trend")} label="Voir cette tendance Pro"/>
+                  <div onClick={()=>setPaywall("trend")} style={{textAlign:"center",padding:"16px 20px",background:"linear-gradient(135deg,rgba(0,245,212,0.08),rgba(114,9,183,0.12))",border:"1px solid rgba(0,245,212,0.2)",borderRadius:14,cursor:"pointer",marginTop:4}}>
+                    <div style={{fontFamily:"'Syne',sans-serif",fontSize:14,fontWeight:700,color:"#fff",marginBottom:4}}>+ Sons en montée · 48 marchés · Alertes 🔔</div>
+                    <div style={{fontSize:12,color:"rgba(0,245,212,0.8)",fontWeight:600}}>Tout débloquer → 1,99 €/mois</div>
                   </div>
-                  {s.hot&&<span style={{fontSize:12,fontWeight:700,background:"linear-gradient(135deg,#f72585,#f9c74f)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>🔥 HOT</span>}
-                </div>
-              ))}
+                </>
+              )}
+
+              {/* Sons (Pro) */}
+              {isPro&&(
+                <>
+                  <div className="divider"/>
+                  <div className="section-title">🎵 Sons en montée</div>
+                  <div className="section-sub">À utiliser maintenant</div>
+                  {sounds.map((s,i)=>(
+                    <div key={i} className="sound-card">
+                      <div className="sound-icon">🎵</div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:500,color:"#fff",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.name}</div>
+                        <div style={{fontSize:11,color:"rgba(232,230,240,0.4)",marginTop:3}}>{s.plays} · <span style={{color:"#f72585"}}>{s.rise}</span></div>
+                      </div>
+                      {s.hot&&<span style={{fontSize:12,fontWeight:700,background:"linear-gradient(135deg,#f72585,#f9c74f)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>🔥 HOT</span>}
+                    </div>
+                  ))}
+                </>
+              )}
             </>
           )}
 
@@ -531,7 +662,8 @@ export default function Wavely() {
             <>
               <div className="section-title">🔍 Early Detector</div>
               <div className="section-sub">Vidéos qui explosent — avant 50K vues</div>
-              {earlyVideos.map((v,i)=>(
+
+              {isPro ? earlyVideos.map((v,i)=>(
                 <div key={i} className="early-card">
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                     <div style={{fontSize:14,fontWeight:500,color:"#fff",flex:1,marginRight:10,lineHeight:1.4}}>{v.title}</div>
@@ -543,7 +675,40 @@ export default function Wavely() {
                     <button className="catch-btn">Surfer →</button>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <>
+                  {/* Teaser flou */}
+                  <div style={{position:"relative",borderRadius:16,overflow:"hidden",marginBottom:12}}>
+                    <div style={{filter:"blur(4px)",opacity:0.35}}>
+                      {earlyVideos.map((v,i)=>(
+                        <div key={i} className="early-card" style={{marginBottom:i<2?10:0}}>
+                          <div style={{fontSize:14,fontWeight:500,color:"#fff"}}>{v.title}</div>
+                          <div style={{fontSize:11,color:"#f9c74f",marginTop:4}}>{v.trend} · 👁 {v.views}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:12}}>
+                      <div style={{fontSize:40}}>🔍</div>
+                      <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:800,color:"#fff",textAlign:"center"}}>3 vidéos en train<br/>d'exploser maintenant</div>
+                      <div style={{fontSize:12,color:"rgba(232,230,240,0.5)",textAlign:"center",maxWidth:220}}>Des créateurs Pro surfent déjà dessus. Ne ratez pas la vague.</div>
+                    </div>
+                  </div>
+
+                  <div className="early-blocked" onClick={()=>setPaywall("early")}>
+                    <div style={{fontSize:36,marginBottom:12}}>🌊</div>
+                    <div style={{fontFamily:"'Syne',sans-serif",fontSize:17,fontWeight:800,color:"#fff",marginBottom:6}}>Débloquer l'Early Detector</div>
+                    <div style={{fontSize:13,color:"rgba(232,230,240,0.5)",marginBottom:20,lineHeight:1.5}}>Accédez aux vidéos qui explosent <strong style={{color:"#f9c74f"}}>avant tout le monde</strong> — mises à jour toutes les heures.</div>
+                    <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginBottom:20}}>
+                      {["🎯 Timing parfait","🔥 Tendances en direct","📈 +400% de vues moyennes"].map((f,i)=>(
+                        <span key={i} style={{fontSize:11,background:"rgba(249,199,79,0.1)",border:"1px solid rgba(249,199,79,0.25)",borderRadius:20,padding:"4px 10px",color:"#f9c74f"}}>{f}</span>
+                      ))}
+                    </div>
+                    <div style={{width:"100%",padding:14,borderRadius:14,background:"linear-gradient(135deg,#f72585,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:800,fontSize:15,cursor:"pointer",textAlign:"center"}}>
+                      🔒 Débloquer pour 1,99 €/mois →
+                    </div>
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -554,15 +719,36 @@ export default function Wavely() {
                 <div className="section-title">⚡ Viral Score</div>
                 <span className="ai-badge">✦ IA RÉELLE</span>
               </div>
+
+              {/* Badge analyse gratuite restante */}
+              {!isPro&&(
+                <div style={{marginBottom:12,padding:"10px 14px",borderRadius:12,background:freeScoreUsed?"rgba(247,37,133,0.08)":"rgba(0,245,212,0.08)",border:`1px solid ${freeScoreUsed?"rgba(247,37,133,0.25)":"rgba(0,245,212,0.25)"}`,display:"flex",alignItems:"center",gap:10}}>
+                  <span style={{fontSize:18}}>{freeScoreUsed?"🔒":"🎁"}</span>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:700,color:freeScoreUsed?"#f72585":"#00f5d4"}}>
+                      {freeScoreUsed?"Analyse gratuite utilisée":"1 analyse gratuite disponible"}
+                    </div>
+                    <div style={{fontSize:11,color:"rgba(232,230,240,0.4)"}}>
+                      {freeScoreUsed?"Passez Pro pour des analyses illimitées →":"Testez l'IA gratuitement — 1 seule fois"}
+                    </div>
+                  </div>
+                  {freeScoreUsed&&<button onClick={goSubscribe} style={{marginLeft:"auto",padding:"5px 12px",borderRadius:20,background:"linear-gradient(135deg,#f72585,#7209b7)",border:"none",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>Pro →</button>}
+                </div>
+              )}
+
               <div className="section-sub">Décris ton idée — Claude IA analyse le vrai potentiel viral</div>
-              <div className="score-input-area">
+              <div className="score-input-area" style={{opacity:(!isPro&&freeScoreUsed)?0.5:1}}>
                 <div className="score-label">Ton idée de vidéo TikTok</div>
-                <textarea className="score-textarea" placeholder="Ex: routine matinale silencieuse en POV, son lo-fi, 30s, dans ma cuisine..." value={viralInput} onChange={e=>setViralInput(e.target.value)} rows={4}/>
+                <textarea className="score-textarea" placeholder="Ex: routine matinale silencieuse en POV, son lo-fi, 30s, dans ma cuisine..." value={viralInput} onChange={e=>setViralInput(e.target.value)} rows={4} disabled={!isPro&&freeScoreUsed}/>
               </div>
-              <button className="analyze-btn" onClick={analyzeViral} disabled={analyzing||!viralInput.trim()}>
-                {analyzing?<><span>Analyse IA en cours</span><div style={{display:"flex",gap:4}}>{[0,1,2].map(i=><div key={i} style={{width:5,height:5,borderRadius:"50%",background:"#fff",animation:`dotBounce 1.2s ${i*0.2}s infinite`}}/>)}</div></>:<span>✦ Analyser avec l'IA</span>}
+              <button className="analyze-btn" onClick={analyzeViral} disabled={analyzing||!viralInput.trim()||(!isPro&&freeScoreUsed)}
+                style={(!isPro&&freeScoreUsed)?{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.1)",cursor:"default",opacity:0.6}:{}}>
+                {analyzing?<><span>Analyse IA en cours</span><div style={{display:"flex",gap:4}}>{[0,1,2].map(i=><div key={i} style={{width:5,height:5,borderRadius:"50%",background:"#fff",animation:`dotBounce 1.2s ${i*0.2}s infinite`}}/>)}</div></> :
+                 (!isPro&&freeScoreUsed)?<span>🔒 Débloquer les analyses illimitées</span>:<span>✦ Analyser avec l'IA</span>}
               </button>
+
               {aiError&&<div style={{background:"rgba(247,37,133,0.08)",border:"1px solid rgba(247,37,133,0.2)",borderRadius:12,padding:12,fontSize:12,color:"#f72585",marginTop:12}}>{aiError}</div>}
+
               {viralResult&&(
                 <div className="result-card">
                   <div className="result-score-big">{viralResult.score}</div>
@@ -588,6 +774,13 @@ export default function Wavely() {
                       ))}
                     </>
                   )}
+                  {/* CTA upgrade après analyse gratuite */}
+                  {!isPro&&(
+                    <div onClick={goSubscribe} style={{marginTop:16,padding:"14px 16px",background:"linear-gradient(135deg,rgba(0,245,212,0.1),rgba(114,9,183,0.15))",border:"1px solid rgba(0,245,212,0.25)",borderRadius:14,textAlign:"center",cursor:"pointer"}}>
+                      <div style={{fontFamily:"'Syne',sans-serif",fontSize:14,fontWeight:800,color:"#fff",marginBottom:4}}>🌊 Vous avez aimé l'analyse ?</div>
+                      <div style={{fontSize:12,color:"rgba(0,245,212,0.8)"}}>Passez Pro — analyses illimitées pour 1,99 €/mois →</div>
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -599,21 +792,11 @@ export default function Wavely() {
               <div className="section-title">⭐ Avis certifiés</div>
               <div className="section-sub">Utilisateurs vérifiés · Abonnés Wavely Pro</div>
               <div className="trust-bar">
-                <div className="trust-stat">
-                  <div className="trust-num">4.9</div>
-                  <div style={{fontSize:10,margin:"2px 0"}}>⭐⭐⭐⭐⭐</div>
-                  <div className="trust-label">Note moyenne</div>
-                </div>
+                <div className="trust-stat"><div className="trust-num">4.9</div><div style={{fontSize:10,margin:"2px 0"}}>⭐⭐⭐⭐⭐</div><div className="trust-label">Note moyenne</div></div>
                 <div style={{width:1,background:"rgba(255,255,255,0.06)",alignSelf:"stretch"}}/>
-                <div className="trust-stat">
-                  <div className="trust-num">2.4K</div>
-                  <div className="trust-label">Avis vérifiés</div>
-                </div>
+                <div className="trust-stat"><div className="trust-num">2.4K</div><div className="trust-label">Avis vérifiés</div></div>
                 <div style={{width:1,background:"rgba(255,255,255,0.06)",alignSelf:"stretch"}}/>
-                <div className="trust-stat">
-                  <div className="trust-num">97%</div>
-                  <div className="trust-label">Satisfaits</div>
-                </div>
+                <div className="trust-stat"><div className="trust-num">97%</div><div className="trust-label">Satisfaits</div></div>
               </div>
               <div style={{background:"rgba(0,245,212,0.06)",border:"1px solid rgba(0,245,212,0.15)",borderRadius:12,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10,fontSize:12,color:"rgba(232,230,240,0.6)"}}>
                 <span style={{fontSize:18}}>🛡️</span>
@@ -652,33 +835,24 @@ export default function Wavely() {
           {activeTab==="pro"&&(
             <>
               <div className="section-title">💳 Wavely Pro</div>
-
-              {/* ✅ État connecté + Pro */}
               {currentUser&&isPro&&(
                 <div style={{background:"linear-gradient(135deg,rgba(0,245,212,0.12),rgba(114,9,183,0.12))",border:"1px solid rgba(0,245,212,0.3)",borderRadius:20,padding:24,textAlign:"center",marginBottom:16}}>
                   <div style={{fontSize:48,marginBottom:12}}>🏄</div>
                   <div style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:800,color:"#00f5d4",marginBottom:6}}>Vous êtes Pro !</div>
                   <div style={{fontSize:13,color:"rgba(232,230,240,0.6)",marginBottom:4}}>Connecté · {currentUser.phoneNumber}</div>
                   <div style={{fontSize:12,color:"rgba(232,230,240,0.4)",marginBottom:20}}>Abonnement actif · 1,99 €/mois</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,textAlign:"left",marginBottom:16}}>
-                    {["📡 Trend Radar illimité","🔍 Early Detector live","⚡ Viral Score IA réel","📝 Captions IA incluses","🔔 Alertes temps réel","🎵 Sons tendance","🌍 48 marchés","🔄 Mises à jour auto"].map((f,i)=>(
-                      <div key={i} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"rgba(232,230,240,0.8)"}}><span style={{color:"#00f5d4"}}>✓</span>{f.split(" ").slice(1).join(" ")}</div>
-                    ))}
-                  </div>
                   <button onClick={()=>setActiveTab("forecast")} style={{width:"100%",padding:14,borderRadius:14,background:"linear-gradient(135deg,#00f5d4,#7209b7)",border:"none",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:14,cursor:"pointer"}}>
                     Explorer les tendances →
                   </button>
                 </div>
               )}
-
-              {/* ✅ Connecté mais pas encore Pro */}
               {currentUser&&!isPro&&(
                 <div className="pay-hero">
                   <div style={{fontSize:12,color:"rgba(0,245,212,0.8)",marginBottom:16,background:"rgba(0,245,212,0.08)",border:"1px solid rgba(0,245,212,0.2)",borderRadius:20,padding:"6px 14px",display:"inline-block"}}>✅ {currentUser.phoneNumber}</div>
                   <div className="pay-price">1,99 €</div>
                   <div style={{fontSize:13,color:"rgba(232,230,240,0.4)",marginBottom:20}}>par mois · annulable à tout moment</div>
                   <div className="pay-features-grid">
-                    {["📡 Trend Radar illimité","🔍 Early Detector live","⚡ Viral Score IA réel","📝 Captions IA incluses","🔔 Alertes temps réel","🎵 Sons tendance","🌍 48 marchés","🔄 Mises à jour auto"].map((f,i)=>(
+                    {["📡 5 Trends complètes","🔍 Early Detector live","⚡ Viral Score illimité","📝 Captions IA incluses","🔔 Alertes temps réel","🎵 Sons tendance","🌍 48 marchés","🔄 Mises à jour auto"].map((f,i)=>(
                       <div key={i} className="pay-feat"><span>{f.split(" ")[0]}</span><span>{f.split(" ").slice(1).join(" ")}</span></div>
                     ))}
                   </div>
@@ -689,8 +863,6 @@ export default function Wavely() {
                   <div style={{fontSize:11,color:"rgba(232,230,240,0.3)",marginTop:12}}>🔒 Paiement chiffré SSL · Géré par Stripe</div>
                 </div>
               )}
-
-              {/* Non connecté */}
               {!currentUser&&(
                 <div className="phone-gate">
                   <div style={{fontSize:48,marginBottom:16}}>📱</div>
