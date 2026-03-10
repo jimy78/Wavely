@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { initializeApp, getApps } from "firebase/app";
+import { getFirestore, doc, onSnapshot } from "firebase/firestore";
 import { getAuth, signInWithPhoneNumber, RecaptchaVerifier, onAuthStateChanged, signOut } from "firebase/auth";
 
 const FIREBASE_CONFIG = {
@@ -15,19 +16,19 @@ const STRIPE_PAYMENT_LINK = "https://buy.stripe.com/dRmcN6edQceD70J9on1ZS03";
 
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap');`;
 
-const trends = [
+const DEFAULT_TRENDS = [
   { tag: "#SilentWalk", score: 94, delta: "+340%", category: "Lifestyle", peak: "18h", icon: "🚶" },
   { tag: "#ColdPlunge", score: 89, delta: "+210%", category: "Wellness", peak: "24h", icon: "🧊" },
   { tag: "#RottenTomatoes", score: 82, delta: "+180%", category: "Food", peak: "36h", icon: "🍅" },
   { tag: "#SoftLife", score: 78, delta: "+155%", category: "Aesthetic", peak: "48h", icon: "🌸" },
   { tag: "#WristCheck", score: 71, delta: "+90%", category: "Fashion", peak: "52h", icon: "⌚" },
 ];
-const sounds = [
+const DEFAULT_SOUNDS = [
   { name: "Midnight Rain – Taylor Swift (Sped Up)", plays: "2.1M", rise: "+580%", hot: true },
   { name: "STAY – The Kid LAROI x Justin Bieber (Remix)", plays: "980K", rise: "+220%", hot: false },
   { name: "Espresso – Sabrina Carpenter", plays: "740K", rise: "+190%", hot: false },
 ];
-const earlyVideos = [
+const DEFAULT_EARLY = [
   { views: "8.4K", trend: "↑ 4x/h", title: "Couples doing the 'Library Date' aesthetic", niche: "Romance" },
   { views: "12K", trend: "↑ 6x/h", title: "Barista art with protein shakes", niche: "Fitness" },
   { views: "6.1K", trend: "↑ 9x/h", title: "Morning routine avec lumière bleue", niche: "Wellbeing" },
@@ -57,6 +58,7 @@ const COUNTRY_CODES = [
 const firebaseApp = getApps().length === 0 ? initializeApp(FIREBASE_CONFIG) : getApps()[0];
 const firebaseAuth = getAuth(firebaseApp);
 firebaseAuth.languageCode = "fr";
+const db = getFirestore(firebaseApp);
 
 async function analyzeWithClaude(idea) {
   const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -313,6 +315,9 @@ export default function Wavely() {
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
   const [paywall, setPaywall] = useState(null); // null | "trend" | "early" | "score"
   const [freeScoreUsed, setFreeScoreUsed] = useState(false);
+  const [trends, setTrends] = useState(DEFAULT_TRENDS);
+  const [sounds, setSounds] = useState(DEFAULT_SOUNDS);
+  const [earlyVideos, setEarlyVideos] = useState(DEFAULT_EARLY);
 
   // Session persistante
   useEffect(() => {
@@ -327,7 +332,16 @@ export default function Wavely() {
     // Check free score usage (par appareil)
     const used = localStorage.getItem("wavely_free_score_used");
     if (used === "true") setFreeScoreUsed(true);
-    return () => unsubscribe();
+    // Load dynamic content from Firestore
+    const unsub = onSnapshot(doc(db, "wavely", "content"), (snap) => {
+      if (snap.exists()) {
+        const d = snap.data()?.data;
+        if (d?.trends?.length) setTrends(d.trends);
+        if (d?.sounds?.length) setSounds(d.sounds);
+        if (d?.earlyVideos?.length) setEarlyVideos(d.earlyVideos);
+      }
+    });
+    return () => { unsubscribe(); unsub(); };
   }, []);
 
   // Détection retour Stripe
