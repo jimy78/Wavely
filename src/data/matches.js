@@ -54,7 +54,11 @@ function buildGroupStage() {
       const dayOffset = (journee - 1) * 5 + (gi % 5);
       const date = new Date(startDay);
       date.setDate(date.getDate() + dayOffset);
-      const hours = pi % 2 === 0 ? 18 : 21;
+      // Coupe du Monde en Amérique du Nord → coups d'envoi le soir/la nuit
+      // en heure française : 18h, 21h, minuit, 3h du matin.
+      // (Un match à 0h/3h se joue donc « dans la nuit » du jour précédent.)
+      const FR_SLOTS = [18, 21, 0, 3];
+      const hours = FR_SLOTS[pi % FR_SLOTS.length];
       date.setHours(hours, 0, 0, 0);
 
       matches.push({
@@ -84,12 +88,17 @@ function buildKnockoutStage() {
     { key: "3P", label: "Petite finale", count: 1, start: "2026-07-18", days: 1 },
     { key: "F", label: "FINALE", count: 1, start: "2026-07-19", days: 1 },
   ];
+  // Phases finales : créneaux soir/nuit en heure française (21h ou minuit).
+  const KO_SLOTS = [21, 0];
   const matches = [];
   rounds.forEach((r) => {
-    const start = new Date(r.start + "T20:00:00");
+    const start = new Date(r.start + "T00:00:00");
     for (let i = 0; i < r.count; i++) {
       const date = new Date(start);
       date.setDate(date.getDate() + (i % r.days));
+      // La finale se joue à 21h (heure française) ; les autres alternent 21h/minuit.
+      const hours = r.key === "F" ? 21 : KO_SLOTS[i % KO_SLOTS.length];
+      date.setHours(hours, 0, 0, 0);
       matches.push({
         id: `${r.key}_${i + 1}`,
         stage: "knockout",
