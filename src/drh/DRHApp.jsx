@@ -77,6 +77,99 @@ function preavisIDCC16(categorie, ancienneteMois, type) {
 const euro = (n) =>
   n.toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
+// ── Jours fériés français, calculés automatiquement pour toute année ──
+// Fêtes mobiles dérivées de Pâques (algorithme de Meeus/Butcher) : le
+// calculateur reste juste chaque année sans aucune mise à jour manuelle.
+function datePaques(annee) {
+  const a = annee % 19, b = Math.floor(annee / 100), c = annee % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const mois = Math.floor((h + l - 7 * m + 114) / 31);
+  const jour = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(Date.UTC(annee, mois - 1, jour, 12));
+}
+
+function joursFeries(annee, alsaceMoselle) {
+  const paques = datePaques(annee);
+  const plus = (d, n) => new Date(d.getTime() + n * 86400000);
+  const fixes = [[0, 1], [4, 1], [4, 8], [6, 14], [7, 15], [10, 1], [10, 11], [11, 25]]
+    .map(([m, j]) => new Date(Date.UTC(annee, m, j, 12)));
+  const mobiles = [plus(paques, 1), plus(paques, 39), plus(paques, 50)];
+  const am = alsaceMoselle ? [plus(paques, -2), new Date(Date.UTC(annee, 11, 26, 12))] : [];
+  return new Set([...fixes, ...mobiles, ...am].map((d) => d.toISOString().slice(0, 10)));
+}
+
+const NOMS_FERIES = (annee, alsaceMoselle) => {
+  const paques = datePaques(annee);
+  const plus = (d, n) => new Date(d.getTime() + n * 86400000);
+  const map = {};
+  const put = (d, nom) => { map[d.toISOString().slice(0, 10)] = nom; };
+  put(new Date(Date.UTC(annee, 0, 1, 12)), "Jour de l'an"); put(new Date(Date.UTC(annee, 4, 1, 12)), "Fête du travail");
+  put(new Date(Date.UTC(annee, 4, 8, 12)), "Victoire 1945"); put(new Date(Date.UTC(annee, 6, 14, 12)), "Fête nationale");
+  put(new Date(Date.UTC(annee, 7, 15, 12)), "Assomption"); put(new Date(Date.UTC(annee, 10, 1, 12)), "Toussaint");
+  put(new Date(Date.UTC(annee, 10, 11, 12)), "Armistice"); put(new Date(Date.UTC(annee, 11, 25, 12)), "Noël");
+  put(plus(paques, 1), "Lundi de Pâques"); put(plus(paques, 39), "Ascension"); put(plus(paques, 50), "Lundi de Pentecôte");
+  if (alsaceMoselle) { put(plus(paques, -2), "Vendredi Saint"); put(new Date(Date.UTC(annee, 11, 26, 12)), "Saint Étienne"); }
+  return map;
+};
+
+function estJourOuvrable(d, feries) {
+  // Jour ouvrable = tous les jours sauf dimanche et jours fériés chômés
+  return d.getUTCDay() !== 0 && !feries.has(d.toISOString().slice(0, 10));
+}
+
+function calculeDelaiEntretien(dateRemiseISO, alsaceMoselle) {
+  // Art. L1232-2 : l'entretien ne peut avoir lieu moins de 5 jours ouvrables
+  // PLEINS après la présentation de la convocation (le jour de remise/première
+  // présentation ne compte pas, ni le jour de l'entretien).
+  const start = new Date(dateRemiseISO + "T12:00:00Z");
+  if (isNaN(start)) return null;
+  const feries = new Set([
+    ...joursFeries(start.getUTCFullYear(), alsaceMoselle),
+    ...joursFeries(start.getUTCFullYear() + 1, alsaceMoselle),
+  ]);
+  const noms = { ...NOMS_FERIES(start.getUTCFullYear(), alsaceMoselle), ...NOMS_FERIES(start.getUTCFullYear() + 1, alsaceMoselle) };
+  const detail = [];
+  let d = new Date(start);
+  let ouvrables = 0;
+  while (ouvrables < 5) {
+    d = new Date(d.getTime() + 86400000);
+    const iso = d.toISOString().slice(0, 10);
+    if (d.getUTCDay() === 0) detail.push({ iso, statut: "exclu (dimanche)" });
+    else if (feries.has(iso)) detail.push({ iso, statut: `exclu (férié : ${noms[iso] || "jour férié"})` });
+    else { ouvrables += 1; detail.push({ iso, statut: `jour ouvrable n°${ouvrables}` }); }
+  }
+  // Entretien au plus tôt le lendemain du 5e jour ouvrable ; si ce jour est un
+  // dimanche ou un férié, on le reporte au premier jour suivant ni dimanche ni férié.
+  let entretien = new Date(d.getTime() + 86400000);
+  while (!estJourOuvrable(entretien, feries)) entretien = new Date(entretien.getTime() + 86400000);
+  return { entretien, detail, feries };
+}
+
+function fenetreNotification(dateEntretienISO, alsaceMoselle) {
+  // Art. L1232-6 : notification au plus tôt 2 jours ouvrables après l'entretien.
+  // Art. L1332-2 : au plus tard 1 mois après l'entretien.
+  const start = new Date(dateEntretienISO + "T12:00:00Z");
+  if (isNaN(start)) return null;
+  const feries = new Set([
+    ...joursFeries(start.getUTCFullYear(), alsaceMoselle),
+    ...joursFeries(start.getUTCFullYear() + 1, alsaceMoselle),
+  ]);
+  let d = new Date(start), ouvrables = 0;
+  while (ouvrables < 2) {
+    d = new Date(d.getTime() + 86400000);
+    if (estJourOuvrable(d, feries)) ouvrables += 1;
+  }
+  const min = new Date(d.getTime() + 86400000);
+  const max = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, start.getUTCDate(), 12));
+  return { min, max };
+}
+
+const frDate = (d) =>
+  d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
 // ══════════════════════════════════════════════════════════════════
 //  BIBLIOTHÈQUE DE PROMPTS — Documents & Process
 // ══════════════════════════════════════════════════════════════════
@@ -484,9 +577,84 @@ function CalcPreavis({ askBot }) {
   );
 }
 
+function CalcDelaiEntretien({ askBot }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [mode, setMode] = useState("lrar");
+  const [dateRemise, setDateRemise] = useState(today);
+  const [dateEntretien, setDateEntretien] = useState("");
+  const [alsace, setAlsace] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
+  const [res, setRes] = useState(null);
+
+  const compute = () => {
+    const delai = calculeDelaiEntretien(dateRemise, alsace);
+    const notif = dateEntretien ? fenetreNotification(dateEntretien, alsace) : null;
+    setRes(delai ? { ...delai, notif } : null);
+  };
+
+  return (
+    <div style={S.card}>
+      <h3 style={S.h2}>📅 Délai convocation → entretien préalable</h3>
+      <p style={S.sub}>
+        5 jours ouvrables pleins minimum (art. L1232-2) — jours fériés français calculés automatiquement
+        pour chaque année (fêtes mobiles incluses : Pâques, Ascension, Pentecôte). Aucune mise à jour manuelle nécessaire.
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
+        <Select label="Mode de remise de la convocation" value={mode} onChange={setMode}
+          options={[["lrar", "LRAR — date de 1re présentation"], ["mainpropre", "Remise en main propre contre décharge"]]} />
+        <Field type="date" value={dateRemise} onChange={setDateRemise}
+          label={mode === "lrar" ? "Date de PREMIÈRE PRÉSENTATION de la LRAR" : "Date de remise en main propre"} />
+        <Field type="date" value={dateEntretien} onChange={setDateEntretien}
+          label="Date d'entretien envisagée (optionnel → fenêtre de notification)" />
+        <div>
+          <label style={S.label}>Jours fériés locaux</label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#c8c8dc", padding: "10px 0", cursor: "pointer" }}>
+            <input type="checkbox" checked={alsace} onChange={(e) => setAlsace(e.target.checked)} />
+            Alsace-Moselle (+ Vendredi Saint, 26 déc.)
+          </label>
+        </div>
+      </div>
+      <button style={S.btn} onClick={compute}>Calculer</button>
+      {res && (
+        <div style={S.result}>
+          <div style={{ fontSize: 12, color: "#8888a0" }}>Entretien préalable possible au plus tôt le</div>
+          <div style={{ fontSize: 21, fontWeight: 800, color: "#00f5d4", textTransform: "capitalize" }}>{frDate(res.entretien)}</div>
+          {res.notif && (
+            <div style={{ marginTop: 10, fontSize: 13.5 }}>
+              Si l'entretien a lieu le <strong style={{ textTransform: "capitalize" }}>{frDate(new Date(dateEntretien + "T12:00:00Z"))}</strong> :
+              notification du licenciement au plus tôt le <strong style={{ color: "#00f5d4", textTransform: "capitalize" }}>{frDate(res.notif.min)}</strong> (2
+              jours ouvrables, art. L1232-6) et au plus tard le <strong style={{ color: "#f9c74f", textTransform: "capitalize" }}>{frDate(res.notif.max)}</strong> (1 mois, art. L1332-2).
+            </div>
+          )}
+          <button onClick={() => setShowDetail(!showDetail)}
+            style={{ background: "none", border: "none", color: "#8888a0", fontSize: 12, cursor: "pointer", padding: 0, marginTop: 10, textDecoration: "underline" }}>
+            {showDetail ? "Masquer" : "Voir"} le décompte jour par jour
+          </button>
+          {showDetail && (
+            <ul style={{ margin: "8px 0 0 18px", padding: 0, fontSize: 12.5, color: "#c8c8dc" }}>
+              <li>{new Date(dateRemise + "T12:00:00Z").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })} — jour de {mode === "lrar" ? "première présentation" : "remise"} : ne compte pas</li>
+              {res.detail.map((j) => (
+                <li key={j.iso}>{new Date(j.iso + "T12:00:00Z").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })} — {j.statut}</li>
+              ))}
+            </ul>
+          )}
+          <div style={S.warn}>
+            ⚠️ En LRAR, le délai court à la <strong>première présentation</strong> du courrier (pas à son retrait). Le jour de remise et le jour de l'entretien ne comptent pas ; dimanches et jours fériés sont exclus du décompte. Prévoyez 1-2 jours de marge : une convocation trop juste rend la procédure irrégulière (indemnité jusqu'à 1 mois de salaire). La convocation doit mentionner l'objet, la possibilité d'assistance du salarié et les coordonnées des conseillers extérieurs le cas échéant.
+          </div>
+          <button onClick={() => askBot(`Vérifie mon planning de procédure de licenciement : convocation ${mode === "lrar" ? "envoyée en LRAR, première présentation le" : "remise en main propre le"} ${dateRemise}${dateEntretien ? `, entretien prévu le ${dateEntretien}` : ""}${alsace ? " (établissement en Alsace-Moselle)" : ""}. Confirme le respect des délais (art. L1232-2, L1232-6, L1332-2, prescription L1332-4), liste les mentions obligatoires de la convocation et les prochaines étapes avec dates.`)}
+            style={{ ...S.btn, marginTop: 12, background: "rgba(255,255,255,.1)", color: "#00f5d4" }}>
+            🧭 Faire vérifier le planning par le DRH
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CalculatorsTab({ askBot }) {
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      <CalcDelaiEntretien askBot={askBot} />
       <CalcLicenciement askBot={askBot} />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))", gap: 16 }}>
         <CalcRetraite askBot={askBot} />
