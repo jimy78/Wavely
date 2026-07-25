@@ -22,14 +22,21 @@ function indemniteConventionnelleIDCC16(salaireRef, anciennete, categorie, annee
   // Barèmes vérifiés — synthèse CCN 3085 à jour du 07/10/2025 (dès 2 ans, sauf faute grave) :
   // Ouvriers/Employés (art. 5 bis ann. I, 14 ann. II) : 1/10 mois/an à 2 ans, 2/10 dès 3 ans
   // TAM (art. 18 ann. III) : 1/10 à 2 ans, 3/10 dès 3 ans
-  // Cadres (art. 17 ann. IV) : 4/10 mois/année comme cadre + 3/10 mois/année comme employé ou TAM
-  if (anciennete < 2) return 0;
+  // Cadres (art. 17 ann. IV) : 4/10 mois/année comme cadre + 3/10 mois/année comme
+  // employé ou TAM, plus une indemnité complémentaire pour le cadre de moins de 65 ans :
+  // 2 mois dès 10 ans d'ancienneté (dont 5 comme cadre), 3 mois dès 20 ans, 4 mois dès 30 ans.
+  if (anciennete < 2) return { total: 0, complement: 0 };
   if (categorie === "cadre") {
     const anneesCadre = Math.max(anciennete - anneesNonCadre, 0);
-    return salaireRef * (0.4 * anneesCadre + 0.3 * Math.min(anneesNonCadre, anciennete));
+    const base = salaireRef * (0.4 * anneesCadre + 0.3 * Math.min(anneesNonCadre, anciennete));
+    let moisComplement = 0;
+    if (anciennete >= 30) moisComplement = 4;
+    else if (anciennete >= 20) moisComplement = 3;
+    else if (anciennete >= 10 && anneesCadre >= 5) moisComplement = 2;
+    return { total: base + salaireRef * moisComplement, complement: salaireRef * moisComplement };
   }
   const taux = anciennete < 3 ? 0.1 : categorie === "tam" ? 0.3 : 0.2;
-  return salaireRef * taux * anciennete;
+  return { total: salaireRef * taux * anciennete, complement: 0 };
 }
 
 function indemniteRetraiteLegale(salaireRef, anciennete) {
@@ -219,6 +226,13 @@ function ChatTab({ messages, setMessages, pendingPrompt, clearPending }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
+  const callApi = async (next) => {
+    const headers = { "Content-Type": "application/json" };
+    const code = localStorage.getItem("drh_access_code");
+    if (code) headers["x-access-code"] = code;
+    return fetch("/api/drh", { method: "POST", headers, body: JSON.stringify({ messages: next }) });
+  };
+
   const send = async (text) => {
     const content = (text ?? input).trim();
     if (!content || loading) return;
@@ -227,12 +241,17 @@ function ChatTab({ messages, setMessages, pendingPrompt, clearPending }) {
     setInput("");
     setLoading(true);
     try {
-      const res = await fetch("/api/drh", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: next }),
-      });
+      let res = await callApi(next);
+      if (res.status === 401) {
+        // Le serveur exige un code d'accès (DRH_ACCESS_CODE) : on le demande une fois
+        const code = window.prompt("Code d'accès DRH Copilot :");
+        if (code) {
+          localStorage.setItem("drh_access_code", code.trim());
+          res = await callApi(next);
+        }
+      }
       const data = await res.json();
+      if (res.status === 401) throw new Error("Code d'accès invalide");
       if (!res.ok) throw new Error(data.detail || data.error || "Erreur API");
       setMessages([...next, { role: "assistant", content: data.reply }]);
     } catch (e) {
@@ -305,6 +324,7 @@ function ChatTab({ messages, setMessages, pendingPrompt, clearPending }) {
 
 function CalcLicenciement({ askBot }) {
   const [salaire, setSalaire] = useState("2400");
+  const [salaire12, setSalaire12] = useState("");
   const [annees, setAnnees] = useState("8");
   const [mois, setMois] = useState("0");
   const [cat, setCat] = useState("oe");
@@ -313,11 +333,16 @@ function CalcLicenciement({ askBot }) {
   const [res, setRes] = useState(null);
 
   const compute = () => {
-    const s = parseFloat(salaire) || 0;
+    // Bases distinctes : la base conventionnelle est la moyenne des 3 derniers mois
+    // (ouvriers/employés) ou le salaire effectif à la cessation (TAM/cadres) — champ 1 ;
+    // la base légale retient le plus favorable entre moyenne 12 mois et moyenne 3 mois.
+    const sConv = parseFloat(salaire) || 0;
+    const s12 = parseFloat(salaire12) || 0;
+    const sLegal = Math.max(sConv, s12);
     const anc = (parseFloat(annees) || 0) + (parseFloat(mois) || 0) / 12;
-    const legale = anc * 12 >= 8 ? indemniteLegaleLicenciement(s, anc) : 0;
-    const conv = indemniteConventionnelleIDCC16(s, anc, cat, parseFloat(anneesNonCadre) || 0);
-    setRes({ s, anc, legale, conv, due: Math.max(legale, conv) });
+    const legale = anc * 12 >= 8 ? indemniteLegaleLicenciement(sLegal, anc) : 0;
+    const conv = indemniteConventionnelleIDCC16(sConv, anc, cat, parseFloat(anneesNonCadre) || 0);
+    setRes({ s: sConv, sLegal, anc, legale, conv: conv.total, complement: conv.complement, due: Math.max(legale, conv.total) });
   };
 
   const catLabel = { oe: "Ouvrier / Employé", tam: "Technicien / Agent de maîtrise", cadre: "Ingénieur / Cadre" }[cat];
@@ -327,7 +352,8 @@ function CalcLicenciement({ askBot }) {
       <h3 style={S.h2}>💼 Indemnité de licenciement / rupture conventionnelle</h3>
       <p style={S.sub}>Comparaison automatique indemnité légale vs conventionnelle IDCC 16 — le montant le plus favorable s'applique.</p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
-        <Field label="Salaire mensuel brut de référence (€)" value={salaire} onChange={setSalaire} />
+        <Field label="Moyenne 3 derniers mois — ou salaire effectif TAM/cadre (€ brut)" value={salaire} onChange={setSalaire} />
+        <Field label="Moyenne 12 derniers mois (€ brut, optionnel)" value={salaire12} onChange={setSalaire12} placeholder="si différente" />
         <Field label="Ancienneté — années" value={annees} onChange={setAnnees} />
         <Field label="Ancienneté — mois supplémentaires" value={mois} onChange={setMois} />
         <Select label="Catégorie (CCN IDCC 16)" value={cat} onChange={setCat}
@@ -342,15 +368,15 @@ function CalcLicenciement({ askBot }) {
       {res && (
         <div style={S.result}>
           <p style={{ margin: 0, fontSize: 13, color: "#8888a0" }}>
-            {catLabel} · {res.anc.toFixed(2).replace(".", ",")} ans · salaire de référence {euro(res.s)}
+            {catLabel} · {res.anc.toFixed(2).replace(".", ",")} ans · base conventionnelle {euro(res.s)}{res.sLegal !== res.s ? ` · base légale ${euro(res.sLegal)}` : ""}
           </p>
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap", margin: "12px 0" }}>
             <div><div style={{ fontSize: 12, color: "#8888a0" }}>Indemnité légale (art. R1234-2)</div><div style={{ fontSize: 20, fontWeight: 700 }}>{euro(res.legale)}</div></div>
-            <div><div style={{ fontSize: 12, color: "#8888a0" }}>Indemnité conventionnelle IDCC 16</div><div style={{ fontSize: 20, fontWeight: 700 }}>{euro(res.conv)}</div></div>
+            <div><div style={{ fontSize: 12, color: "#8888a0" }}>Indemnité conventionnelle IDCC 16{res.complement > 0 ? " (dont complément cadre)" : ""}</div><div style={{ fontSize: 20, fontWeight: 700 }}>{euro(res.conv)}{res.complement > 0 ? <span style={{ fontSize: 12, color: "#8888a0" }}> (compl. {euro(res.complement)})</span> : null}</div></div>
             <div><div style={{ fontSize: 12, color: "#00f5d4" }}>Montant minimum dû {motif === "rc" ? "(indemnité spécifique RC)" : ""}</div><div style={{ fontSize: 26, fontWeight: 800, color: "#00f5d4" }}>{euro(res.due)}</div></div>
           </div>
           <div style={S.warn}>
-            ⚠️ Estimation indicative — barèmes conventionnels vérifiés (synthèse CCN 3085 à jour du 07/10/2025). Base de calcul conventionnelle : moyenne des 3 derniers mois (ouvriers/employés) ou salaire effectif à la cessation (TAM/cadres) ; base légale : le plus favorable entre moyenne 12 mois et moyenne 3 mois. Indemnité légale due dès 8 mois d'ancienneté, conventionnelle dès 2 ans ; <strong>indemnité légale doublée en cas d'inaptitude d'origine professionnelle</strong>. Cadre licencié entre 60 et 65 ans : minoration possible de 20 %/an. Faute grave/lourde : pas d'indemnité.
+            ⚠️ Estimation indicative — barèmes conventionnels vérifiés (synthèse CCN 3085 à jour du 07/10/2025). Indemnité légale due dès 8 mois d'ancienneté, conventionnelle dès 2 ans ; <strong>indemnité légale doublée en cas d'inaptitude d'origine professionnelle</strong>. Le complément cadre (2/3/4 mois à 10/20/30 ans, le palier 10 ans exigeant 5 ans comme cadre) est réservé aux cadres de <strong>moins de 65 ans</strong> ; cadre licencié entre 60 et 65 ans pouvant liquider sa retraite : minoration possible de 20 %/an — faites vérifier ces cas par le DRH. Faute grave/lourde : pas d'indemnité.
           </div>
           <button onClick={() => askBot(`Vérifie et détaille ce calcul d'indemnité de ${motif === "rc" ? "rupture conventionnelle" : "licenciement"} : ${catLabel}, ${res.anc.toFixed(2)} ans d'ancienneté, salaire de référence ${res.s} € brut/mois, CCN transport routier IDCC 16. Donne le calcul étape par étape, la base juridique, le régime social et fiscal de l'indemnité, et les points de vigilance.`)}
             style={{ ...S.btn, marginTop: 12, background: "rgba(255,255,255,.1)", color: "#00f5d4" }}>

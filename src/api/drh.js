@@ -68,22 +68,27 @@ Dernière revalorisation : avenant n°16 du 9 avril 2025 (étendu le 19/06/2025)
 - Réponds toujours en français.`;
 
 export default async function handler(req, res) {
-  // CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
+  // Pas d'en-têtes CORS : l'API n'est appelée qu'en same-origin par le front.
+  // Les navigateurs tiers sont ainsi bloqués par défaut.
+  if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  // Garde-fou optionnel contre l'usage non autorisé du proxy : si
+  // DRH_ACCESS_CODE est défini côté Vercel, le front doit fournir le code.
+  const accessCode = process.env.DRH_ACCESS_CODE;
+  if (accessCode && req.headers["x-access-code"] !== accessCode) {
+    return res.status(401).json({ error: "Unauthorized", detail: "Code d'accès requis" });
+  }
 
   const { messages } = req.body;
   if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: "Missing messages" });
   }
 
-  // On ne garde que les 20 derniers tours pour maîtriser le contexte
-  const history = messages.slice(-20).map((m) => ({
+  // Contexte borné pour limiter le coût par requête
+  const history = messages.slice(-12).map((m) => ({
     role: m.role === "assistant" ? "assistant" : "user",
-    content: String(m.content || "").slice(0, 8000),
+    content: String(m.content || "").slice(0, 6000),
   }));
 
   try {
