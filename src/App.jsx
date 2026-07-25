@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, doc, onSnapshot } from "firebase/firestore";
 import { getAuth, signInWithPhoneNumber, RecaptchaVerifier, onAuthStateChanged, signOut } from "firebase/auth";
+import PayrollBulkWidget from "./components/PayrollBulkWidget";
 
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyD4txUu4Ex55ERw3_w__eBV00cr-iRnLg4",
@@ -408,6 +409,7 @@ export default function Wavely() {
     { id: "early",    label: "Early", icon: "🔍" },
     { id: "score",    label: "Viral Score", icon: "⚡" },
     { id: "avis",     label: "Avis", icon: "⭐" },
+    { id: "paie",     label: "Paie", icon: "💼" },
     { id: "pro",      label: "S'abonner", icon: "💳" },
   ];
 
@@ -839,6 +841,12 @@ export default function Wavely() {
           )}
 
           {/* ── S'ABONNER ── */}
+          {activeTab==="paie"&&(
+            <div style={{margin:"0 -16px"}}>
+              <PayrollBulkWidget />
+            </div>
+          )}
+
           {activeTab==="pro"&&(
             <>
               <div className="section-title">💳 Wavely Pro</div>
