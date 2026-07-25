@@ -22,13 +22,25 @@ système d'expert DRH qui impose :
 - Signalement des risques juridiques avec niveau (faible / moyen / élevé)
 
 ### 🧮 Calculateurs
-Formules codées en dur (pas d'IA, donc pas d'hallucination possible) :
+Formules codées en dur (pas d'IA, donc pas d'hallucination possible), barèmes
+conventionnels **vérifiés sur la synthèse CCN 3085 à jour du 07/10/2025**
+(dernière extension : avenant n°16 du 09/04/2025) :
 - **Indemnité de licenciement / rupture conventionnelle** : légale (art. R1234-2 :
-  1/4 mois/an ≤ 10 ans, 1/3 au-delà, éligible dès 8 mois) **vs** conventionnelle IDCC 16
-  par catégorie (ouvriers/employés, TAM, cadres) — le plus favorable est retenu.
-- **Départ / mise à la retraite** : art. D1237-1 (½ mois ≥ 10 ans, 1 mois ≥ 15, 1,5 ≥ 20,
-  2 ≥ 30) ; mise à la retraite = indemnité légale de licenciement.
-- **Préavis** : minima légaux (art. L1234-1) + renvoi vers le détail conventionnel via le bot.
+  1/4 mois/an ≤ 10 ans, 1/3 au-delà, éligible dès 8 mois) **vs** conventionnelle IDCC 16 :
+  ouvriers/employés 1/10 puis 2/10 mois/an, TAM 1/10 puis 3/10, cadres 4/10 par année
+  cadre + 3/10 par année employé/TAM — le plus favorable est retenu.
+- **Départ à la retraite** : légale (art. D1237-1) **vs** barème IDCC 16 ouvriers/employés/TAM
+  (0,5 mois ≥ 10 ans → 2,5 mois ≥ 30 ans, base moyenne 12 mois) ; cadres (% rémunération
+  annuelle, art. 18 annexe IV) orientés vers le bot ; mise à la retraite = indemnité légale
+  de licenciement.
+- **Préavis** : tableau conventionnel complet par catégorie (ouvriers, employés/TAM 1-5,
+  TAM 6-8, cadres) pour démission et licenciement, avec heures de recherche d'emploi et
+  dispenses.
+
+Le prompt système du bot embarque en outre une base de connaissances vérifiée issue de
+la synthèse conventionnelle 2025 : période d'essai, maintien de salaire maladie/AT,
+garantie d'emploi, travail de nuit (prime 20 %), frais de déplacement (avenant n°79 du
+06/02/2025, montants au 01/03/2025), indemnisation jours fériés/dimanches, CFA.
 
 Chaque résultat porte un avertissement (salaire de référence, doublement inaptitude
 professionnelle, barèmes conventionnels à confirmer sur Légifrance) et un bouton

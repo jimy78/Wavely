@@ -6,8 +6,9 @@ const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@4
 //  MOTEUR DE CALCUL — formules légales (Code du travail) + IDCC 16
 //  Sources : art. L1234-9 / R1234-2 C. trav. (indemnité légale),
 //  art. D1237-1 (départ volontaire à la retraite), art. L1234-1 (préavis),
-//  CCN Transports routiers IDCC 16 brochure 3085 (barèmes conventionnels).
-//  Les barèmes conventionnels évoluent : à vérifier sur Légifrance.
+//  CCN Transports routiers IDCC 16 brochure 3085 — barèmes vérifiés sur la
+//  synthèse conventionnelle à jour du 07/10/2025 (avenant n°16 du 09/04/2025).
+//  Les barèmes évoluent par avenant : contrôler Légifrance avant décision.
 // ══════════════════════════════════════════════════════════════════
 
 function indemniteLegaleLicenciement(salaireRef, anciennete) {
@@ -17,21 +18,21 @@ function indemniteLegaleLicenciement(salaireRef, anciennete) {
   return salaireRef * (a10 / 4 + plus10 / 3);
 }
 
-function indemniteConventionnelleIDCC16(salaireRef, anciennete, categorie) {
-  // Barèmes CCN IDCC 16 (à confirmer sur Légifrance à la date du calcul) :
-  // Ouvriers/Employés : 1/10 de mois/an (2 à 3 ans), puis 2/10 de mois/an dès 3 ans
-  // TAM : 1/10 (2 à 3 ans), puis 3/10 dès 3 ans
-  // Ingénieurs/Cadres : 4/10 de mois par année dans la catégorie, dès 3 ans
-  if (categorie === "cadre") {
-    if (anciennete < 3) return 0;
-    return salaireRef * 0.4 * anciennete;
-  }
+function indemniteConventionnelleIDCC16(salaireRef, anciennete, categorie, anneesNonCadre = 0) {
+  // Barèmes vérifiés — synthèse CCN 3085 à jour du 07/10/2025 (dès 2 ans, sauf faute grave) :
+  // Ouvriers/Employés (art. 5 bis ann. I, 14 ann. II) : 1/10 mois/an à 2 ans, 2/10 dès 3 ans
+  // TAM (art. 18 ann. III) : 1/10 à 2 ans, 3/10 dès 3 ans
+  // Cadres (art. 17 ann. IV) : 4/10 mois/année comme cadre + 3/10 mois/année comme employé ou TAM
   if (anciennete < 2) return 0;
+  if (categorie === "cadre") {
+    const anneesCadre = Math.max(anciennete - anneesNonCadre, 0);
+    return salaireRef * (0.4 * anneesCadre + 0.3 * Math.min(anneesNonCadre, anciennete));
+  }
   const taux = anciennete < 3 ? 0.1 : categorie === "tam" ? 0.3 : 0.2;
   return salaireRef * taux * anciennete;
 }
 
-function indemniteRetraiteVolontaire(salaireRef, anciennete) {
+function indemniteRetraiteLegale(salaireRef, anciennete) {
   // Départ volontaire à la retraite — art. D1237-1
   if (anciennete >= 30) return salaireRef * 2;
   if (anciennete >= 20) return salaireRef * 1.5;
@@ -40,11 +41,30 @@ function indemniteRetraiteVolontaire(salaireRef, anciennete) {
   return 0;
 }
 
-function preavisLegal(ancienneteMois) {
-  // Licenciement — art. L1234-1
-  if (ancienneteMois < 6) return "Durée fixée par la CCN / l'usage (pas de minimum légal)";
-  if (ancienneteMois < 24) return "1 mois minimum (légal)";
-  return "2 mois minimum (légal)";
+function indemniteRetraiteConvIDCC16(salaireRef12m, anciennete) {
+  // Ouvriers, employés, TAM — synthèse CCN 3085 (base : moyenne des 12 derniers mois)
+  if (anciennete >= 30) return salaireRef12m * 2.5;
+  if (anciennete >= 25) return salaireRef12m * 2;
+  if (anciennete >= 20) return salaireRef12m * 1.5;
+  if (anciennete >= 15) return salaireRef12m * 1;
+  if (anciennete >= 10) return salaireRef12m * 0.5;
+  return 0;
+}
+
+function preavisIDCC16(categorie, ancienneteMois, type) {
+  // Tableau vérifié — synthèse CCN 3085 (art. 3/5 ann. I, 11/13 ann. II, 11/17 ann. III, 8/15 ann. IV)
+  if (categorie === "cadre") return "3 mois";
+  if (categorie === "tam68") return "2 mois";
+  if (categorie === "etam15") {
+    if (type === "demission") return "1 mois";
+    return ancienneteMois >= 24 ? "2 mois" : "1 mois";
+  }
+  // Ouvriers
+  if (type === "demission")
+    return "1 semaine — portée à 2 semaines pour le personnel des entreprises de transport routier de marchandises et activités auxiliaires";
+  if (ancienneteMois < 6) return "1 semaine";
+  if (ancienneteMois < 24) return "1 mois";
+  return "2 mois (minimum légal, art. L1234-1)";
 }
 
 const euro = (n) =>
@@ -288,6 +308,7 @@ function CalcLicenciement({ askBot }) {
   const [annees, setAnnees] = useState("8");
   const [mois, setMois] = useState("0");
   const [cat, setCat] = useState("oe");
+  const [anneesNonCadre, setAnneesNonCadre] = useState("0");
   const [motif, setMotif] = useState("licenciement");
   const [res, setRes] = useState(null);
 
@@ -295,7 +316,7 @@ function CalcLicenciement({ askBot }) {
     const s = parseFloat(salaire) || 0;
     const anc = (parseFloat(annees) || 0) + (parseFloat(mois) || 0) / 12;
     const legale = anc * 12 >= 8 ? indemniteLegaleLicenciement(s, anc) : 0;
-    const conv = indemniteConventionnelleIDCC16(s, anc, cat);
+    const conv = indemniteConventionnelleIDCC16(s, anc, cat, parseFloat(anneesNonCadre) || 0);
     setRes({ s, anc, legale, conv, due: Math.max(legale, conv) });
   };
 
@@ -311,6 +332,9 @@ function CalcLicenciement({ askBot }) {
         <Field label="Ancienneté — mois supplémentaires" value={mois} onChange={setMois} />
         <Select label="Catégorie (CCN IDCC 16)" value={cat} onChange={setCat}
           options={[["oe", "Ouvrier / Employé"], ["tam", "Technicien / Agent de maîtrise"], ["cadre", "Ingénieur / Cadre"]]} />
+        {cat === "cadre" && (
+          <Field label="Dont années comme employé/TAM avant passage cadre" value={anneesNonCadre} onChange={setAnneesNonCadre} />
+        )}
         <Select label="Type de rupture" value={motif} onChange={setMotif}
           options={[["licenciement", "Licenciement (hors faute grave/lourde)"], ["rc", "Rupture conventionnelle"]]} />
       </div>
@@ -326,7 +350,7 @@ function CalcLicenciement({ askBot }) {
             <div><div style={{ fontSize: 12, color: "#00f5d4" }}>Montant minimum dû {motif === "rc" ? "(indemnité spécifique RC)" : ""}</div><div style={{ fontSize: 26, fontWeight: 800, color: "#00f5d4" }}>{euro(res.due)}</div></div>
           </div>
           <div style={S.warn}>
-            ⚠️ Estimation indicative. Salaire de référence = le plus favorable entre la moyenne des 12 derniers mois et celle des 3 derniers mois (primes annuelles proratisées). Indemnité légale due dès 8 mois d'ancienneté ; <strong>doublée en cas d'inaptitude d'origine professionnelle</strong>. Barème conventionnel à confirmer sur Légifrance (IDCC 16). Faute grave/lourde : pas d'indemnité (sauf dispositions plus favorables).
+            ⚠️ Estimation indicative — barèmes conventionnels vérifiés (synthèse CCN 3085 à jour du 07/10/2025). Base de calcul conventionnelle : moyenne des 3 derniers mois (ouvriers/employés) ou salaire effectif à la cessation (TAM/cadres) ; base légale : le plus favorable entre moyenne 12 mois et moyenne 3 mois. Indemnité légale due dès 8 mois d'ancienneté, conventionnelle dès 2 ans ; <strong>indemnité légale doublée en cas d'inaptitude d'origine professionnelle</strong>. Cadre licencié entre 60 et 65 ans : minoration possible de 20 %/an. Faute grave/lourde : pas d'indemnité.
           </div>
           <button onClick={() => askBot(`Vérifie et détaille ce calcul d'indemnité de ${motif === "rc" ? "rupture conventionnelle" : "licenciement"} : ${catLabel}, ${res.anc.toFixed(2)} ans d'ancienneté, salaire de référence ${res.s} € brut/mois, CCN transport routier IDCC 16. Donne le calcul étape par étape, la base juridique, le régime social et fiscal de l'indemnité, et les points de vigilance.`)}
             style={{ ...S.btn, marginTop: 12, background: "rgba(255,255,255,.1)", color: "#00f5d4" }}>
@@ -341,23 +365,36 @@ function CalcLicenciement({ askBot }) {
 function CalcRetraite({ askBot }) {
   const [salaire, setSalaire] = useState("2400");
   const [annees, setAnnees] = useState("22");
+  const [cat, setCat] = useState("oe");
   const [mode, setMode] = useState("depart");
   const [res, setRes] = useState(null);
 
   const compute = () => {
     const s = parseFloat(salaire) || 0;
     const anc = parseFloat(annees) || 0;
-    const montant = mode === "depart" ? indemniteRetraiteVolontaire(s, anc) : indemniteLegaleLicenciement(s, anc);
-    setRes({ s, anc, montant });
+    if (mode === "mise") {
+      // Mise à la retraite par l'employeur = indemnité légale de licenciement (art. L1237-7)
+      setRes({ s, anc, montant: indemniteLegaleLicenciement(s, anc), detail: "Indemnité légale de licenciement (art. L1237-7)" });
+      return;
+    }
+    if (cat === "cadre") {
+      setRes({ s, anc, montant: indemniteRetraiteLegale(s, anc), detail: "Minimum légal (art. D1237-1) — le barème cadres IDCC 16 (% de la rémunération annuelle, art. 18 annexe IV) peut être plus favorable : faites-le vérifier par le DRH" });
+      return;
+    }
+    const legale = indemniteRetraiteLegale(s, anc);
+    const conv = indemniteRetraiteConvIDCC16(s, anc);
+    setRes({ s, anc, montant: Math.max(legale, conv), detail: `Légale ${euro(legale)} vs conventionnelle IDCC 16 ${euro(conv)} — le plus favorable est retenu (base conventionnelle : moyenne des 12 derniers mois)` });
   };
 
   return (
     <div style={S.card}>
       <h3 style={S.h2}>🌅 Indemnité de départ / mise à la retraite</h3>
-      <p style={S.sub}>Départ volontaire (art. D1237-1) ou mise à la retraite par l'employeur (= indemnité de licenciement).</p>
+      <p style={S.sub}>Départ volontaire : légale (art. D1237-1) vs barème IDCC 16 (0,5 à 2,5 mois selon ancienneté). Mise à la retraite : indemnité légale de licenciement.</p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
         <Field label="Salaire mensuel brut de référence (€)" value={salaire} onChange={setSalaire} />
         <Field label="Ancienneté (années)" value={annees} onChange={setAnnees} />
+        <Select label="Catégorie" value={cat} onChange={setCat}
+          options={[["oe", "Ouvrier / Employé"], ["tam", "Technicien / Agent de maîtrise"], ["cadre", "Ingénieur / Cadre"]]} />
         <Select label="Type" value={mode} onChange={setMode}
           options={[["depart", "Départ volontaire à la retraite"], ["mise", "Mise à la retraite par l'employeur"]]} />
       </div>
@@ -365,10 +402,11 @@ function CalcRetraite({ askBot }) {
       {res && (
         <div style={S.result}>
           <div style={{ fontSize: 26, fontWeight: 800, color: "#00f5d4" }}>{euro(res.montant)}</div>
+          <div style={{ fontSize: 12.5, color: "#8888a0", marginTop: 6 }}>{res.detail}</div>
           <div style={S.warn}>
-            ⚠️ Minimum légal. La CCN IDCC 16 et le régime du congé de fin d'activité (CFA) peuvent prévoir mieux — à vérifier selon la catégorie et la date. Régime social/fiscal différent selon départ volontaire ou mise à la retraite.
+            ⚠️ Pensez au congé de fin d'activité (CFA) des conducteurs : départ possible dès 55 ans (âge minimal 59 ans depuis le 01/09/2023, progressif avec la réforme des retraites). Régime social/fiscal différent selon départ volontaire ou mise à la retraite.
           </div>
-          <button onClick={() => askBot(`Détaille le calcul de l'indemnité de ${mode === "depart" ? "départ volontaire à la retraite" : "mise à la retraite par l'employeur"} pour un salarié du transport routier (IDCC 16) : ${res.anc} ans d'ancienneté, ${res.s} € brut/mois. Précise le régime social et fiscal, les dispositions conventionnelles éventuellement plus favorables et le dispositif congé de fin d'activité (CFA) des conducteurs.`)}
+          <button onClick={() => askBot(`Détaille le calcul de l'indemnité de ${mode === "depart" ? "départ volontaire à la retraite" : "mise à la retraite par l'employeur"} pour un ${cat === "cadre" ? "cadre" : cat === "tam" ? "TAM" : "ouvrier/employé"} du transport routier (IDCC 16) : ${res.anc} ans d'ancienneté, ${res.s} € brut/mois. Applique le barème conventionnel exact (annexes CCN 3085), précise le régime social et fiscal, et le dispositif congé de fin d'activité (CFA) des conducteurs.`)}
             style={{ ...S.btn, marginTop: 12, background: "rgba(255,255,255,.1)", color: "#00f5d4" }}>
             🧭 Faire vérifier par le DRH
           </button>
@@ -380,25 +418,39 @@ function CalcRetraite({ askBot }) {
 
 function CalcPreavis({ askBot }) {
   const [ancMois, setAncMois] = useState("30");
+  const [cat, setCat] = useState("ouvrier");
+  const [type, setType] = useState("licenciement");
   const [res, setRes] = useState(null);
+
+  const heuresRecherche = {
+    ouvrier: "12 h d'absence rémunérée pour recherche d'emploi (TRM : 6 h au choix du salarié, 6 h employeur)",
+    etam15: "2 h payées/jour pendant 1 mois pour recherche d'emploi",
+    tam68: "2 h payées/jour pendant 2 mois — dispense possible après le 1er mois (prévenance 10 j)",
+    cadre: "2 h payées/jour pendant 2 mois — dispense possible après le 2e mois (prévenance 15 j)",
+  };
 
   return (
     <div style={S.card}>
-      <h3 style={S.h2}>⏳ Préavis de licenciement</h3>
-      <p style={S.sub}>Minimum légal (art. L1234-1) — la CCN IDCC 16 prévoit des durées spécifiques par catégorie, souvent plus favorables.</p>
+      <h3 style={S.h2}>⏳ Préavis (démission / licenciement)</h3>
+      <p style={S.sub}>Durées conventionnelles vérifiées — synthèse CCN 3085 (art. 3/5 ann. I, 11/13 ann. II, 11/17 ann. III, 8/15 ann. IV).</p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 12 }}>
+        <Select label="Catégorie" value={cat} onChange={setCat}
+          options={[["ouvrier", "Ouvrier"], ["etam15", "Employé / TAM groupes 1-5"], ["tam68", "TAM groupes 6-8"], ["cadre", "Ingénieur / Cadre"]]} />
+        <Select label="Type de rupture" value={type} onChange={setType}
+          options={[["licenciement", "Licenciement"], ["demission", "Démission"]]} />
         <Field label="Ancienneté (en mois)" value={ancMois} onChange={setAncMois} />
       </div>
-      <button style={S.btn} onClick={() => setRes(preavisLegal(parseFloat(ancMois) || 0))}>Calculer</button>
+      <button style={S.btn} onClick={() => setRes(preavisIDCC16(cat, parseFloat(ancMois) || 0, type))}>Calculer</button>
       {res && (
         <div style={S.result}>
           <div style={{ fontSize: 18, fontWeight: 700, color: "#00f5d4" }}>{res}</div>
+          <div style={{ fontSize: 12.5, color: "#8888a0", marginTop: 6 }}>{type === "licenciement" ? heuresRecherche[cat] : ""}</div>
           <div style={S.warn}>
-            ⚠️ Pas de préavis en cas de faute grave/lourde ou d'inaptitude. Consultez l'annexe de la CCN correspondant à la catégorie du salarié (ouvriers, employés, TAM, cadres) : les durées conventionnelles priment si plus favorables.
+            ⚠️ Pas de préavis en cas de faute grave/lourde ou d'inaptitude (régime spécifique). Les minima légaux (art. L1234-1) s'appliquent s'ils sont plus favorables.
           </div>
-          <button onClick={() => askBot(`Quelle est la durée exacte du préavis (licenciement ET démission) prévue par la CCN transport routier IDCC 16 pour chaque catégorie de salarié (ouvrier, employé, TAM, cadre) selon l'ancienneté ? Indique les articles/annexes de la convention et les cas de dispense.`)}
+          <button onClick={() => askBot(`Détaille le régime complet du préavis pour un ${cat === "ouvrier" ? "ouvrier" : cat === "etam15" ? "employé/TAM groupes 1-5" : cat === "tam68" ? "TAM groupes 6-8" : "cadre"} du transport routier (CCN IDCC 16) en cas de ${type} avec ${ancMois} mois d'ancienneté : durée, heures de recherche d'emploi, dispenses possibles, indemnité compensatrice, articles applicables.`)}
             style={{ ...S.btn, marginTop: 12, background: "rgba(255,255,255,.1)", color: "#00f5d4" }}>
-            🧭 Demander le détail conventionnel au DRH
+            🧭 Demander le détail au DRH
           </button>
         </div>
       )}
