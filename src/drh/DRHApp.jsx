@@ -148,6 +148,23 @@ function calculeDelaiEntretien(dateRemiseISO, alsaceMoselle) {
   return { entretien, detail, feries };
 }
 
+// La Poste ne distribue ni le dimanche ni les jours fériés : l'estimation
+// d'acheminement avance de N jours de distribution (lun-sam non fériés).
+function avanceJoursOuvrables(dateISO, nbJours, alsaceMoselle) {
+  const start = new Date(dateISO + "T12:00:00Z");
+  if (isNaN(start)) return null;
+  const feries = new Set([
+    ...joursFeries(start.getUTCFullYear(), alsaceMoselle),
+    ...joursFeries(start.getUTCFullYear() + 1, alsaceMoselle),
+  ]);
+  let d = new Date(start), n = 0;
+  while (n < nbJours) {
+    d = new Date(d.getTime() + 86400000);
+    if (estJourOuvrable(d, feries)) n += 1;
+  }
+  return d;
+}
+
 function fenetreNotification(dateEntretienISO, alsaceMoselle) {
   // Art. L1232-6 : notification au plus tôt 2 jours ouvrables après l'entretien.
   // Art. L1332-2 : au plus tard 1 mois après l'entretien.
@@ -579,17 +596,33 @@ function CalcPreavis({ askBot }) {
 
 function CalcDelaiEntretien({ askBot }) {
   const today = new Date().toISOString().slice(0, 10);
-  const [mode, setMode] = useState("lrar");
+  const [mode, setMode] = useState("lrar-envoi");
   const [dateRemise, setDateRemise] = useState(today);
+  const [achemine, setAchemine] = useState("3");
+  const [marge, setMarge] = useState("1");
   const [dateEntretien, setDateEntretien] = useState("");
   const [alsace, setAlsace] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [res, setRes] = useState(null);
 
   const compute = () => {
-    const delai = calculeDelaiEntretien(dateRemise, alsace);
+    // En mode "date d'envoi", on estime la 1re présentation (acheminement
+    // paramétrable), puis on ajoute une marge de sécurité en jours ouvrables.
+    let presentationISO = dateRemise;
+    let presentation = null;
+    if (mode === "lrar-envoi") {
+      presentation = avanceJoursOuvrables(dateRemise, parseInt(achemine, 10), alsace);
+      if (!presentation) return;
+      presentationISO = presentation.toISOString().slice(0, 10);
+    }
+    const delai = calculeDelaiEntretien(presentationISO, alsace);
+    if (!delai) return;
+    const nbMarge = parseInt(marge, 10);
+    const conseil = nbMarge > 0
+      ? avanceJoursOuvrables(delai.entretien.toISOString().slice(0, 10), nbMarge, alsace)
+      : delai.entretien;
     const notif = dateEntretien ? fenetreNotification(dateEntretien, alsace) : null;
-    setRes(delai ? { ...delai, notif } : null);
+    setRes({ ...delai, presentation, presentationISO, conseil, notif });
   };
 
   return (
@@ -600,10 +633,20 @@ function CalcDelaiEntretien({ askBot }) {
         pour chaque année (fêtes mobiles incluses : Pâques, Ascension, Pentecôte). Aucune mise à jour manuelle nécessaire.
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 12 }}>
-        <Select label="Mode de remise de la convocation" value={mode} onChange={setMode}
-          options={[["lrar", "LRAR — date de 1re présentation"], ["mainpropre", "Remise en main propre contre décharge"]]} />
+        <Select label="Situation" value={mode} onChange={setMode}
+          options={[
+            ["lrar-envoi", "LRAR — je connais seulement la date d'envoi"],
+            ["lrar", "LRAR — 1re présentation connue (suivi La Poste)"],
+            ["mainpropre", "Remise en main propre contre décharge"],
+          ]} />
         <Field type="date" value={dateRemise} onChange={setDateRemise}
-          label={mode === "lrar" ? "Date de PREMIÈRE PRÉSENTATION de la LRAR" : "Date de remise en main propre"} />
+          label={mode === "lrar-envoi" ? "Date d'ENVOI de la LRAR" : mode === "lrar" ? "Date de PREMIÈRE PRÉSENTATION de la LRAR" : "Date de remise en main propre"} />
+        {mode === "lrar-envoi" && (
+          <Select label="Acheminement estimé" value={achemine} onChange={setAchemine}
+            options={[["2", "J+2 — optimiste"], ["3", "J+3 — standard La Poste"], ["4", "J+4 — prudent"], ["5", "J+5 — très prudent"]]} />
+        )}
+        <Select label="Marge de sécurité (jours ouvrables)" value={marge} onChange={setMarge}
+          options={[["0", "Aucune"], ["1", "+1 jour — recommandé"], ["2", "+2 jours"], ["3", "+3 jours"]]} />
         <Field type="date" value={dateEntretien} onChange={setDateEntretien}
           label="Date d'entretien envisagée (optionnel → fenêtre de notification)" />
         <div>
@@ -617,8 +660,18 @@ function CalcDelaiEntretien({ askBot }) {
       <button style={S.btn} onClick={compute}>Calculer</button>
       {res && (
         <div style={S.result}>
-          <div style={{ fontSize: 12, color: "#8888a0" }}>Entretien préalable possible au plus tôt le</div>
-          <div style={{ fontSize: 21, fontWeight: 800, color: "#00f5d4", textTransform: "capitalize" }}>{frDate(res.entretien)}</div>
+          {res.presentation && (
+            <div style={{ fontSize: 13, marginBottom: 10 }}>
+              1ʳᵉ présentation estimée : <strong style={{ textTransform: "capitalize" }}>{frDate(res.presentation)}</strong>
+              <span style={{ color: "#8888a0" }}> — à confirmer sur le suivi La Poste</span>
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: "#8888a0" }}>
+            {mode === "lrar-envoi" ? "Minimum légal (si présentation conforme à l'estimation)" : "Entretien préalable possible au plus tôt le"}
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#c8c8dc", textTransform: "capitalize" }}>{frDate(res.entretien)}</div>
+          <div style={{ fontSize: 12, color: "#8888a0", marginTop: 10 }}>Date d'entretien conseillée (avec marge)</div>
+          <div style={{ fontSize: 21, fontWeight: 800, color: "#00f5d4", textTransform: "capitalize" }}>{frDate(res.conseil)}</div>
           {res.notif && (
             <div style={{ marginTop: 10, fontSize: 13.5 }}>
               Si l'entretien a lieu le <strong style={{ textTransform: "capitalize" }}>{frDate(new Date(dateEntretien + "T12:00:00Z"))}</strong> :
@@ -632,14 +685,14 @@ function CalcDelaiEntretien({ askBot }) {
           </button>
           {showDetail && (
             <ul style={{ margin: "8px 0 0 18px", padding: 0, fontSize: 12.5, color: "#c8c8dc" }}>
-              <li>{new Date(dateRemise + "T12:00:00Z").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })} — jour de {mode === "lrar" ? "première présentation" : "remise"} : ne compte pas</li>
+              <li>{new Date(res.presentationISO + "T12:00:00Z").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })} — jour de {mode === "lrar" ? "première présentation" : mode === "lrar-envoi" ? "présentation estimée" : "remise"} : ne compte pas</li>
               {res.detail.map((j) => (
                 <li key={j.iso}>{new Date(j.iso + "T12:00:00Z").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })} — {j.statut}</li>
               ))}
             </ul>
           )}
           <div style={S.warn}>
-            ⚠️ En LRAR, le délai court à la <strong>première présentation</strong> du courrier (pas à son retrait). Le jour de remise et le jour de l'entretien ne comptent pas ; dimanches et jours fériés sont exclus du décompte. Prévoyez 1-2 jours de marge : une convocation trop juste rend la procédure irrégulière (indemnité jusqu'à 1 mois de salaire). La convocation doit mentionner l'objet, la possibilité d'assistance du salarié et les coordonnées des conseillers extérieurs le cas échéant.
+            ⚠️ En LRAR, le délai court à la <strong>première présentation</strong> du courrier (pas à son retrait). {mode === "lrar-envoi" && (<><strong>Mode estimation :</strong> dès l'envoi, notez le n° du recommandé et suivez-le sur laposte.fr — le suivi affiche « Présenté le… » ; si la présentation réelle est plus tardive que l'estimation, recalculez en mode « 1ʳᵉ présentation connue » et reportez l'entretien si besoin. </>)}Le jour de remise et le jour de l'entretien ne comptent pas ; dimanches et fériés exclus. Une convocation trop juste rend la procédure irrégulière (indemnité jusqu'à 1 mois de salaire) — d'où la date conseillée avec marge. La convocation doit mentionner l'objet et la possibilité d'assistance du salarié.
           </div>
           <button onClick={() => askBot(`Vérifie mon planning de procédure de licenciement : convocation ${mode === "lrar" ? "envoyée en LRAR, première présentation le" : "remise en main propre le"} ${dateRemise}${dateEntretien ? `, entretien prévu le ${dateEntretien}` : ""}${alsace ? " (établissement en Alsace-Moselle)" : ""}. Confirme le respect des délais (art. L1232-2, L1232-6, L1332-2, prescription L1332-4), liste les mentions obligatoires de la convocation et les prochaines étapes avec dates.`)}
             style={{ ...S.btn, marginTop: 12, background: "rgba(255,255,255,.1)", color: "#00f5d4" }}>
